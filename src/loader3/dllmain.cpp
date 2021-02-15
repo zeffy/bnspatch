@@ -25,7 +25,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       UINT len;
       PWSTR buffer;
       if ( !VerQueryValueW(block.data(), L"\\StringFileInfo\\040904b0\\OriginalFilename", reinterpret_cast<LPVOID *>(&buffer), &len) )
-        return TRUE;
+        break;
 
       switch ( fnv1a::make_hash(buffer, len - 1) ) {
         case L"Client.exe"_fnv1a:
