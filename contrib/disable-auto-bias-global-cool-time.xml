@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<patches>
+  <patch file="system.config2.xml">
+    <!-- disable auto bias gcd -->
+    <select-node query="/config/option[@name='use-auto-bias-global-cool-time']/@value">
+      <set-value value="false" />
+    </select-node>
+  </patch>
+</patches>

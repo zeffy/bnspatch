@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<patches>
+  <patch file="ClientConfiguration.xml">
+    <select-node query="/config">
+      <select-node query="./option[@name='foreground-max-framerate']/@value">
+        <set-value value="0" />
+      </select-node>
+      <select-node query="./option[@name='vsync']/@value">
+        <set-value value="1" />
+      </select-node>
+    </select-node>
+  </patch>
+</patches>

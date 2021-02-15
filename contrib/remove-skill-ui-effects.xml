@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<patches>
+  <patch file="skill3_contextscriptdata_*.xml">
+    <!-- remove skill ui effects -->
+    <select-nodes query="/table/contextscript/stance/layer/decision/result/@*[contains(name(),'-ui-effect')]">
+      <remove />
+    </select-nodes>
+  </patch>
+</patches>

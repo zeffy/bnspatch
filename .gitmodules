@@ -1,0 +1,6 @@
+[submodule "dependencies/cx_fnv1a"]
+	path = dependencies/cx_fnv1a
+	url = https://github.com/zeffy/cx_fnv1a.git
+[submodule "dependencies/ntapi"]
+	path = dependencies/ntapi
+	url = https://github.com/zeffy/ntapi.git

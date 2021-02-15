@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<patches>
+  <patch file="QuestData*.xml">
+    <select-nodes query="/table/quest[not(@retired='y')]">
+      <!-- convert all talk quests to approach -->
+      <select-nodes query="./acquisition/case/@type[.='talk']">
+        <set-value value="approach" />
+      </select-nodes>
+      <select-nodes query="./mission-step/mission[not(@reward-1='352_final_set1' or @reward-1='494_middle_set1' or @reward-1='526_middle_set1')]/case[@progress-mission='y']/@type[.='talk']">
+        <set-value value="approach" />
+      </select-nodes>
+    </select-nodes>
+  </patch>
+</patches>

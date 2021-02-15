@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<patches>
+  <patch file="client.config2.xml">
+      <select-node query="/config/group[@name='context']">
+        <!-- able to resurrect immediately  -->
+        <select-node query="./option[@name='instantaneous-dead-context-delay']/@value">
+          <set-value value="0" />
+        </select-node>
+        <!-- able to gather chi immediately -->
+        <select-node query="./option[@name='exhaust-context-delay']/@value">
+          <set-value value="0" />
+        </select-node>
+      </select-node>
+  </patch>
+</patches>

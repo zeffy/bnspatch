@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<patches>
+  <patch file="client.config2.xml">
+    <!-- show quest letters in quest log -->
+    <select-node query="/config/group[@name='quest']/option[@name='quest-talk-to-self-from-quickslot-to-questjournal']/@value">
+      <set-value value="false" />
+    </select-node>
+  </patch>
+</patches>
