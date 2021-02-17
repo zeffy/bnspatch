@@ -121,11 +121,6 @@
 			<SetChecksum>true</SetChecksum>
 			<LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
 		</Link>
-		<PostBuildEvent>
-			<Command>
-				"$(SolutionDir)tools\upx\upx.exe" --lzma "$(TargetPath)"
-			</Command>
-		</PostBuildEvent>
 	</ItemDefinitionGroup>
 	<PropertyGroup Label="Vcpkg" Condition="'$(Configuration)'=='MinSizeRelease'">
 		<VcpkgConfiguration>Release</VcpkgConfiguration>

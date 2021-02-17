@@ -56,11 +56,11 @@
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Platform)'=='x64'">
 		<OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin64\</OutDir>
-		<IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\</IntDir>
+		<IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin64\</IntDir>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Platform)'=='Win32'">
 		<OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin\</OutDir>
-		<IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\</IntDir>
+		<IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin\</IntDir>
 	</PropertyGroup>
 	<ItemDefinitionGroup>
 		<ClCompile>
@@ -124,11 +124,6 @@
 			<SetChecksum>true</SetChecksum>
 			<LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
 		</Link>
-		<PostBuildEvent>
-			<Command>
-				"$(SolutionDir)tools\upx\upx.exe" --lzma "$(TargetPath)"
-			</Command>
-		</PostBuildEvent>
 	</ItemDefinitionGroup>
 	<PropertyGroup Label="Vcpkg" Condition="'$(Configuration)'=='MinSizeRelease'">
 		<VcpkgConfiguration>Release</VcpkgConfiguration>

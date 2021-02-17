@@ -16,12 +16,7 @@ DWORD WINAPI GetPrivateProfileStringW_hook(
 
   try {
     std::call_once(once, [&]() {
-      if ( !lpAppName
-        || !lpKeyName
-        || !lpFileName
-        || _wcsicmp(lpAppName, L"Locale") != 0
-        || _wcsicmp(lpKeyName, L"Publisher") != 0
-        || _wcsicmp(PathFindFileNameW(lpFileName), L"Local.ini") != 0 )
+      if ( !lpFileName || _wcsicmp(PathFindFileNameW(lpFileName), L"SystemText.ini") != 0 )
         throw std::exception{};
 
       for ( const auto &[hlib, plugin_info] : GPlugins ) {

@@ -95,8 +95,10 @@ void __cdecl oep_notify([[maybe_unused]] const version_t client_version)
 }
 
 extern "C" __declspec(dllexport) plugin_info_t GPluginInfo = {
+#ifdef NDEBUG
   .hide_from_peb = true,
   .erase_pe_header = true,
+#endif
   .init = init,
   .oep_notify = oep_notify,
   .priority = 1

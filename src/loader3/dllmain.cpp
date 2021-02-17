@@ -30,11 +30,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       switch ( fnv1a::make_hash(buffer, len - 1) ) {
         case L"Client.exe"_fnv1a:
         case L"BNSR.exe"_fnv1a: {
-          std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
-          path.replace_filename(L"winmm.dll");
-          if ( GetModuleHandleW(path.c_str()) != hModule )
-            break;
-
           VS_FIXEDFILEINFO *vsf;
           if ( VerQueryValueW(block.data(), L"\\", reinterpret_cast<LPVOID *>(&vsf), &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
             GClientVersion.emplace(HIWORD(vsf->dwProductVersionMS), LOWORD(vsf->dwProductVersionMS), HIWORD(vsf->dwProductVersionLS), LOWORD(vsf->dwProductVersionLS));
