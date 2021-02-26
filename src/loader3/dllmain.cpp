@@ -21,7 +21,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
       const std::span<UCHAR> res{reinterpret_cast<PUCHAR>(ptr), count};
       const std::vector<UCHAR> block{res.begin(), res.end()};
-
+      
       UINT len;
       PWSTR buffer;
       if ( !VerQueryValueW(block.data(), L"\\StringFileInfo\\040904b0\\OriginalFilename", reinterpret_cast<LPVOID *>(&buffer), &len) )

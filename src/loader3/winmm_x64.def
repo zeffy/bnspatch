@@ -133,11 +133,11 @@ EXPORTS
 	mmioStringToFOURCCW
 	mmioWrite
 	sndPlaySoundW
-	timeBeginPeriod
-	timeEndPeriod
-	timeGetDevCaps
-	timeGetSystemTime
-	timeGetTime
+	timeBeginPeriod=KERNEL32.timeBeginPeriod
+	timeEndPeriod=KERNEL32.timeEndPeriod
+	timeGetDevCaps=KERNEL32.timeGetDevCaps
+	timeGetSystemTime=KERNEL32.timeGetSystemTime
+	timeGetTime=KERNEL32.timeGetTime
 	timeKillEvent
 	timeSetEvent
 	waveInAddBuffer

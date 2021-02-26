@@ -69,8 +69,5 @@
     <ClInclude Include="xmlreader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="callbacks.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

@@ -5,7 +5,6 @@
 #include "pluginsdk.h"
 #include "xmlhooks.h"
 
-
 bool __cdecl init([[maybe_unused]] const version_t client_version)
 {
   NtCurrentPeb()->BeingDebugged = FALSE;
