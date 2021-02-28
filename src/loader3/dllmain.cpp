@@ -19,8 +19,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       const auto ptr = LoadResource(nullptr, resInfo);
       if ( !ptr ) break;
 
-      const std::span<UCHAR> res{reinterpret_cast<PUCHAR>(ptr), count};
-      const std::vector<UCHAR> block{res.begin(), res.end()};
+      const std::span res{reinterpret_cast<PUCHAR>(ptr), count};
+      const std::vector block{res.begin(), res.end()};
 
       UINT len;
       PWSTR buffer;
@@ -62,7 +62,7 @@ inline void hide_from_peb(HMODULE hLibModule)
   const auto cs = static_cast<nt::rtl::critical_section *>(NtCurrentPeb()->LoaderLock);
   std::lock_guard<nt::rtl::critical_section> guard(*cs);
 
-  PPEB_LDR_DATA ldrData = NtCurrentPeb()->Ldr;
+  const auto ldrData = NtCurrentPeb()->Ldr;
 
   for ( auto Next = ldrData->InLoadOrderModuleList.Flink; Next != &ldrData->InLoadOrderModuleList; Next = Next->Flink ) {
     const auto Entry = CONTAINING_RECORD(Next, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
