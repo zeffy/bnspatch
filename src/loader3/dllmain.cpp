@@ -154,7 +154,7 @@ void loader3_once_fx(LPCSTR pszDll)
   }
 }
 
-FARPROC WINAPI DliNotifyHook2(unsigned dliNotify, PDelayLoadInfo pdli)
+const PfnDliHook __pfnDliNotifyHook2 = [](unsigned dliNotify, PDelayLoadInfo pdli) -> FARPROC
 {
   switch ( dliNotify ) {
     case dliNotePreLoadLibrary: {
@@ -172,5 +172,3 @@ FARPROC WINAPI DliNotifyHook2(unsigned dliNotify, PDelayLoadInfo pdli)
   }
   return nullptr;
 }
-
-const PfnDliHook __pfnDliNotifyHook2 = DliNotifyHook2;
