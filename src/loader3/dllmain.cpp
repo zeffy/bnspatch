@@ -21,7 +21,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
       const std::span<UCHAR> res{reinterpret_cast<PUCHAR>(ptr), count};
       const std::vector<UCHAR> block{res.begin(), res.end()};
-      
+
       UINT len;
       PWSTR buffer;
       if ( !VerQueryValueW(block.data(), L"\\StringFileInfo\\040904b0\\OriginalFilename", reinterpret_cast<LPVOID *>(&buffer), &len) )
@@ -87,8 +87,20 @@ inline void hide_from_peb(HMODULE hLibModule)
   }
 }
 
-void load_plugins()
+void loader3_once_fx(LPCSTR pszDll)
 {
+  if ( !GClientVersion )
+    return;
+
+  const auto Base = wil::GetModuleInstanceHandle();
+  const auto ExportDir = nt::rtl::image_directory_entry_to_data<IMAGE_EXPORT_DIRECTORY>(Base, IMAGE_DIRECTORY_ENTRY_EXPORT);
+  if ( !ExportDir )
+    return;
+
+  const auto ModuleName = nt::rtl::image_rva_to_va<CHAR>(Base, ExportDir->Name);
+  if ( !ModuleName || _stricmp(ModuleName, pszDll) != 0 )
+    return;
+
   std::filesystem::path application_dir{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
   application_dir.remove_filename();
 
@@ -146,15 +158,9 @@ FARPROC WINAPI DliNotifyHook2(unsigned dliNotify, PDelayLoadInfo pdli)
 {
   switch ( dliNotify ) {
     case dliNotePreLoadLibrary: {
-      if ( GClientVersion ) {
-        const auto Base = wil::GetModuleInstanceHandle();
-        const auto ExportDir = nt::rtl::image_directory_entry_to_data<IMAGE_EXPORT_DIRECTORY>(Base, IMAGE_DIRECTORY_ENTRY_EXPORT);
-        if ( ExportDir ) {
-          const auto ModuleName = nt::rtl::image_rva_to_va<CHAR>(Base, ExportDir->Name);
-          if ( ModuleName && _stricmp(ModuleName, pdli->szDll) == 0 )
-            load_plugins();
-        }
-      }
+      static std::once_flag once;
+      std::call_once(once, loader3_once_fx, pdli->szDll);
+
       std::wstring result;
       if ( SUCCEEDED(wil::GetSystemDirectoryW(result)) ) {
         std::filesystem::path path{std::move(result)};
