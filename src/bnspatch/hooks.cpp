@@ -280,7 +280,7 @@ HWND WINAPI FindWindowA_hook(
 {
   if ( lpClassName ) {
     switch ( fnv1a::make_hash(lpClassName, fnv1a::ascii_toupper) ) {
-#ifdef _X86_
+#ifndef _WIN64
       case "OLLYDBG"_fnv1au:
       case "GBDYLLO"_fnv1au:
       case "pediy06"_fnv1au:
