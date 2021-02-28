@@ -16,6 +16,9 @@ DWORD WINAPI GetPrivateProfileStringW_hook(
 
   try {
     std::call_once(once, [&]() {
+      if ( !GClientVersion )
+        return;
+
       if ( !lpFileName || _wcsicmp(PathFindFileNameW(lpFileName), L"SystemText.ini") != 0 )
         throw std::exception{};
 
