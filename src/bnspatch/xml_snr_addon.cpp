@@ -168,7 +168,9 @@ xml_snr_addon::xml_snr_addon(const std::filesystem::path &path)
     for ( const auto &[s, r] : boost::combine(search_rng, replace_rng) )
       data.snr.emplace_back(s.text().get(), r.text().get());
 
-    data.description.emplace(file_node.child(L"description").text().get());
+    const auto description_node = file_node.child(L"description");
+    if ( description_node )
+      data.description.emplace(description_node.text().get());
     _map.emplace(std::move(fname), std::move(data));
   }
 }
