@@ -46,7 +46,7 @@ NTSTATUS NTAPI NtCreateFile_hook(
   PVOID EaBuffer,
   ULONG EaLength)
 {
-#ifdef _M_IX86
+#ifndef _WIN64
   if ( auto const ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName) ) {
     switch ( fnv1a::make_hash(ObjectName->data(), ObjectName->size(), fnv1a::ascii_toupper) ) {
       case L"\\\\.\\SICE"_fnv1au:
