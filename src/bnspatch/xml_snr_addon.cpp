@@ -4,8 +4,17 @@
 
 void xml_snr_addon_base::clean_file_str(std::wstring &str)
 {
-  boost::replace_all(str, L"\\\\", L"\\");
-  boost::replace_all(str, L"/", L"\\");
+  replace_all(str, L"\\\\", L"\\");
+  replace_all(str, L"/", L"\\");
+}
+
+void xml_snr_addon_base::replace_all(std::wstring &str, const std::wstring_view &s, const std::wstring_view &r)
+{
+  size_t pos = 0;
+  while ( (pos = str.find(s, pos)) != std::wstring::npos ) {
+    str.replace(pos, s.size(), r);
+    pos += r.size();
+  }
 }
 
 bool xml_snr_addon_base::is_valid() const
@@ -56,8 +65,8 @@ void xml_snr_addon_base::get(const wchar_t *xml, std::vector<std::reference_wrap
 
 void xml_snr_legacy_addon::clean_snr_str(std::wstring &str)
 {
-  boost::replace_all(str, L"[NewLine]", L"\n");
-  boost::replace_all(str, L"NewLine", L"\n");
+  replace_all(str, L"[NewLine]", L"\n");
+  replace_all(str, L"NewLine", L"\n");
 }
 
 xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)

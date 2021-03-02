@@ -37,7 +37,7 @@ XmlDoc *thiscall_(ReadMem_hook, const XmlReader *thisptr, const unsigned char *m
           // apply addons
           for ( const auto &addon : addons ) {
             const auto &ref = addon.get();
-            boost::replace_all(writer.result, ref.first, ref.second);
+            xml_snr_addon_base::replace_all(writer.result, ref.first, ref.second);
           }
           // reload document
           res = doc.load_string(writer.result.c_str());

@@ -1,10 +1,5 @@
 #pragma once
-#include <cwctype>
-#include <filesystem>
-#include <map>
-#include <string_view>
-#include <utility>
-#include <vector>
+#include "pch.h"
 
 class xml_snr_addon_base
 {
@@ -26,6 +21,8 @@ public:
   const std::wstring &name() const;
   bool save(const std::filesystem::path &path) const;
   void get(const wchar_t *xml, std::vector<std::reference_wrapper<const std::pair<std::wstring, std::wstring>>> &v) const;
+
+  static void replace_all(std::wstring &str, const std::wstring_view &s, const std::wstring_view &r);
 };
 
 class xml_snr_legacy_addon : public xml_snr_addon_base
