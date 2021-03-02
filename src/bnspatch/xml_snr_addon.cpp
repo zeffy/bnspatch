@@ -56,8 +56,8 @@ void xml_snr_addon_base::get(const wchar_t *xml, std::vector<std::reference_wrap
   for ( const auto &[pattern, data] : _map ) {
     // remove first path node (which is typically like "xml[bit].dat.files\\")
     std::wstring_view view{pattern};
-    const auto off = view.find_first_not_of(L'\\', view.find_first_of(L'\\'));
-    view.remove_prefix(off);
+    const auto count = view.find_first_not_of(L'\\', view.find_first_of(L'\\'));
+    view.remove_prefix(count);
 
     if ( FastWildCompareW(xml, view.data()) ) {
       for ( const auto &item : data.snr )
