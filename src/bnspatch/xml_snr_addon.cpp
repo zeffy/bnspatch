@@ -38,9 +38,9 @@ bool xml_snr_addon_base::save(const std::filesystem::path &path) const
   for ( const auto &[file, data] : _map ) {
     auto file_node = files_node.append_child(L"file");
     file_node.append_attribute(L"path") = file.c_str();
-    for ( const auto &[search, replace] : data.snr ) {
-      file_node.append_child(L"search").append_child(pugi::node_cdata).set_value(search.c_str());
-      file_node.append_child(L"replace").append_child(pugi::node_cdata).set_value(replace.c_str());
+    for ( const auto &[s, r] : data.snr ) {
+      file_node.append_child(L"search").append_child(pugi::node_cdata).set_value(s.c_str());
+      file_node.append_child(L"replace").append_child(pugi::node_cdata).set_value(r.c_str());
     }
 
     auto description_node = file_node.append_child(L"description");
@@ -53,13 +53,13 @@ bool xml_snr_addon_base::save(const std::filesystem::path &path) const
 
 void xml_snr_addon_base::get(const wchar_t *xml, std::vector<std::reference_wrapper<const std::pair<std::wstring, std::wstring>>> &v) const
 {
-  for ( const auto &[pattern, data] : _map ) {
+  for ( const auto &[file, data] : _map ) {
     // remove first path node (which is typically like "xml[bit].dat.files\\")
-    std::wstring_view view{pattern};
-    const auto count = view.find_first_not_of(L'\\', view.find_first_of(L'\\'));
-    view.remove_prefix(count);
+    std::wstring_view sv{file};
+    const auto count = sv.find_first_not_of(L'\\', sv.find_first_of(L'\\'));
+    sv.remove_prefix(count);
 
-    if ( FastWildCompareW(xml, view.data()) ) {
+    if ( FastWildCompareW(xml, sv.data()) ) {
       for ( const auto &item : data.snr )
         v.emplace_back(std::cref(item));
     }
