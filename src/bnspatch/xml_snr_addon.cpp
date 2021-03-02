@@ -42,7 +42,10 @@ bool xml_snr_addon_base::save(const std::filesystem::path &path) const
       file_node.append_child(L"search").append_child(pugi::node_cdata).set_value(search.c_str());
       file_node.append_child(L"replace").append_child(pugi::node_cdata).set_value(replace.c_str());
     }
-    file_node.append_child(L"description").append_child(pugi::node_pcdata).set_value(data.description.c_str());
+
+    auto description_node = file_node.append_child(L"description");
+    if ( data.description )
+      description_node.append_child(pugi::node_pcdata).set_value(data.description->c_str());
   }
 
   return document.save_file(path.c_str(), L"  ");
@@ -94,7 +97,7 @@ xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
       if ( fname ) {
         // New addon in same file, at this point Searches should match Replacements,
         // and there should be a description.
-        if ( !description || search_vec.size() != replace_vec.size() ) {
+        if ( search_vec.size() != replace_vec.size() ) {
           _map.clear();
           return;
         }
@@ -106,9 +109,7 @@ xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
         search_vec.clear();
         replace_vec.clear();
 
-        data.description = std::move(*description);
-        description.reset();
-
+        data.description.swap(description);
         _map.emplace(std::move(*fname), std::move(data));
       }
       fname.emplace(value);
@@ -122,7 +123,7 @@ xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
       clean_snr_str(str);
       replace_vec.emplace_back(std::move(str));
     } else if ( key == L"Description" ) {
-      description = value;
+      description.emplace(value);
     }
   }
 
@@ -130,7 +131,7 @@ xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
     xml_snr_addon_data data;
     for ( const auto &[s, r] : boost::combine(search_vec, replace_vec) )
       data.snr.emplace_back(std::move(s), std::move(r));
-    data.description = std::move(*description);
+    data.description.swap(description);
     _map.emplace(std::move(*fname), std::move(data));
   } else {
     _map.clear();
@@ -151,10 +152,6 @@ xml_snr_addon::xml_snr_addon(const std::filesystem::path &path)
     if ( !path_attribute )
       continue;
 
-    const auto description_node = file_node.child(L"description");
-    if ( !description_node )
-      continue;
-
     std::wstring fname{path_attribute.value()};
     clean_file_str(fname);
 
@@ -171,7 +168,7 @@ xml_snr_addon::xml_snr_addon(const std::filesystem::path &path)
 
     for ( auto it = search_rng.begin(), it2 = replace_rng.begin(); it != search_rng.end(); ++it, ++it2 )
       data.snr.emplace_back(it->text().get(), it2->text().get());
-    data.description = description_node.text().get();
+    data.description.emplace(file_node.child(L"description").text().get());
     _map.emplace(std::move(fname), std::move(data));
   }
 }

@@ -7,7 +7,7 @@ public:
   struct xml_snr_addon_data
   {
     std::vector<std::pair<std::wstring, std::wstring>> snr;
-    std::wstring description;
+    std::optional<std::wstring> description;
   };
 
 protected:

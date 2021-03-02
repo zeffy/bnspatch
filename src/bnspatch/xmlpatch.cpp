@@ -67,14 +67,6 @@ std::vector<pugi::xml_node> get_relevant_patches(const wchar_t *xml)
   return relevant_patches;
 }
 
-void apply_patches(pugi::xml_document &src, pugi::xml_encoding encoding, const std::vector<pugi::xml_node> &patches)
-{
-  for ( const auto &patch : patches ) {
-    std::unordered_map<fnv1a::type, pugi::xml_node> node_keys;
-    patch_node(src, encoding, src, patch.children(), node_keys);
-  }
-}
-
 const pugi::xml_document &get_or_load_patches()
 {
   static std::once_flag once_flag;
@@ -87,16 +79,16 @@ const pugi::xml_document &get_or_load_patches()
 
     document.append_child(L"patches");
 
-    auto include_guard = std::unordered_set<fnv1a::type>();
+    std::unordered_set<std::wstring> include_guard;
     preprocess(document, patches_path(), include_guard);
   }, doc);
   return doc;
 }
 
-void preprocess(pugi::xml_document &patches_doc, const std::filesystem::path &path, std::unordered_set<fnv1a::type> &include_guard)
+void preprocess(pugi::xml_document &patches_doc, const std::filesystem::path &path, std::unordered_set<std::wstring> &include_guard)
 {
   pugi::xml_document document;
-  if ( include_guard.emplace(fnv1a::make_hash(path.c_str(), fnv1a::ascii_toupper)).second
+  if ( include_guard.emplace(std::move(path.string())).second
     && try_load_file(document, path, pugi::parse_default | pugi::parse_pi)
     && !_wcsicmp(document.document_element().name(), L"patches") ) {
 
@@ -150,7 +142,7 @@ void patch_node(
   const pugi::xml_encoding encoding,
   const pugi::xpath_node &ctx,
   const pugi::xml_object_range<pugi::xml_node_iterator> &children,
-  std::unordered_map<fnv1a::type, pugi::xml_node> &node_keys)
+  std::unordered_map<std::wstring, pugi::xml_node> &node_keys)
 {
   for ( const auto &current : children ) {
     if ( ctx.attribute() ) {
@@ -264,22 +256,22 @@ void patch_node(
           break;
 
         case L"prepend-copy"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, ctx.node().prepend_copy(it->second), current.children(), node_keys);
           break;
 
         case L"append-copy"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, ctx.node().append_copy(it->second), current.children(), node_keys);
           break;
 
         case L"prepend-move"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, ctx.node().prepend_move(it->second), current.children(), node_keys);
           break;
 
         case L"append-move"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, ctx.node().append_move(it->second), current.children(), node_keys);
           break;
 
@@ -350,22 +342,22 @@ void patch_node(
           break;
 
         case L"insert-copy-after"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, it->second.parent().insert_move_before(ctx.node(), it->second), current.children(), node_keys);
           break;
 
         case L"insert-copy-before"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, it->second.parent().insert_copy_before(ctx.node(), it->second), current.children(), node_keys);
           break;
 
         case L"insert-move-after"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, it->second.parent().insert_move_after(ctx.node(), it->second), current.children(), node_keys);
           break;
 
         case L"insert-move-before"_fnv1au: // ok
-          if ( const auto it = node_keys.find(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper)); it != node_keys.end() )
+          if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
             patch_node(doc, encoding, it->second.parent().insert_move_before(ctx.node(), it->second), current.children(), node_keys);
           break;
 
@@ -402,7 +394,7 @@ void patch_node(
           break;
 
         case L"assign-node-key"_fnv1au: // ok
-          node_keys.insert_or_assign(fnv1a::make_hash(current.attribute(L"node-key").value(), fnv1a::ascii_toupper), ctx.node());
+          node_keys.insert_or_assign(current.attribute(L"node-key").value(), ctx.node());
           break;
 
         case L"remove"_fnv1au: // ok
