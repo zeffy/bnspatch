@@ -10,14 +10,11 @@
 
 #include <fnv1a.h>
 #include <pugixml.hpp>
+#include "xml_snr_addon.h"
 
-std::wstring &ReplaceStringInPlace(std::wstring &haystack,
-  const std::wstring_view &search,
-  const std::wstring_view &replace);
-
-const std::multimap<std::filesystem::path, std::vector<std::pair<std::wstring, std::wstring>>> get_or_load_addons();
+const std::vector<xml_snr_addon_base> &get_xml_snr_addons();
 std::filesystem::path documents_path();
-std::vector<std::pair<std::wstring, std::wstring>> get_relevant_addons(const wchar_t *xml);
+std::vector<std::reference_wrapper<const std::pair<std::wstring, std::wstring>>> get_relevant_addons(const wchar_t *xml);
 std::vector<pugi::xml_node> get_relevant_patches(const wchar_t *xml);
 void apply_patches(pugi::xml_document &src, pugi::xml_encoding, const std::vector<pugi::xml_node> &patches);
 const pugi::xml_document &get_or_load_patches();

@@ -154,8 +154,7 @@ void loader3_once_fx(LPCSTR pszDll)
   }
 }
 
-const PfnDliHook __pfnDliNotifyHook2 = [](unsigned dliNotify, PDelayLoadInfo pdli) -> FARPROC
-{
+const PfnDliHook __pfnDliNotifyHook2 = [](unsigned dliNotify, PDelayLoadInfo pdli) -> FARPROC {
   switch ( dliNotify ) {
     case dliNotePreLoadLibrary: {
       static std::once_flag once;
@@ -171,4 +170,4 @@ const PfnDliHook __pfnDliNotifyHook2 = [](unsigned dliNotify, PDelayLoadInfo pdl
     }
   }
   return nullptr;
-}
+};

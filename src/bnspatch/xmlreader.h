@@ -143,8 +143,8 @@ public:
   virtual class XmlDoc *Read(const unsigned char *mem, unsigned int size, const wchar_t *xmlFileNameForLogging, class XmlPieceReader *xmlPieceReader) const = 0;
   virtual void Close(class XmlDoc *doc) const = 0;
   virtual class XmlDoc *NewDoc() const = 0;
-  virtual bool IsBinary(const wchar_t *xml) const = 0;
   virtual bool IsBinary(const unsigned char *mem, unsigned int size) const = 0;
+  virtual bool IsBinary(const wchar_t *xml) const = 0;
 }; /* size: 0x0008 */
 
 #endif

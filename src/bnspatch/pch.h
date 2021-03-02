@@ -27,27 +27,28 @@
 #include <strsafe.h>
 #include <safeint.hpp>
 
-#include <vector>
-#include <utility>
-#include <type_traits>
-#include <tuple>
-#include <string>
-#include <string_view>
-#include <span>
-#include <random>
-#include <queue>
-#include <optional>
-#include <mutex>
-#include <memory>
-#include <map>
-#include <fstream>
-#include <filesystem>
-#include <cstdlib>
-#include <cstdint>
-#include <chrono>
-#include <bitset>
-#include <array>
 #include <algorithm>
+#include <array>
+#include <bitset>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <queue>
+#include <random>
+#include <ranges>
+#include <span>
+#include <string_view>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 using namespace std::chrono_literals;
 using namespace std::string_view_literals;
@@ -56,6 +57,9 @@ using namespace std::string_literals;
 #if !defined(RESULT_DIAGNOSTICS_LEVEL)
 #define RESULT_DIAGNOSTICS_LEVEL 0
 #endif // !RESULT_DIAGNOSTICS_LEVEL
+
+#include <boost/algorithm/string.hpp>
+#include <boost/range/combine.hpp>
 
 #include <fmt/format.h>
 #include <fmt/chrono.h>

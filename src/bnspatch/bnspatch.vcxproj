@@ -163,12 +163,12 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="xml_snr_addon.cpp" />
     <ClCompile Include="xmlcommon.cpp" />
     <ClCompile Include="xmlhooks.cpp" />
     <ClCompile Include="xmlpatch.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\util.hpp" />
     <ClInclude Include="detours.hpp" />
     <ClInclude Include="hooks.h" />
     <ClInclude Include="pch.h" />
@@ -176,5 +176,6 @@
     <ClInclude Include="xmlhooks.h" />
     <ClInclude Include="xmlpatch.h" />
     <ClInclude Include="xmlreader.h" />
+    <ClInclude Include="xml_snr_addon.h" />
   </ItemGroup>
 </Project>

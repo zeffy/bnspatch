@@ -1,77 +1,29 @@
 #include "pch.h"
 #include "FastWildCompare.hpp"
 #include "xmlpatch.h"
+#include "xml_snr_addon.h"
 
-std::wstring &ReplaceStringInPlace(std::wstring &haystack,
-  const std::wstring_view &search,
-  const std::wstring_view &replace)
-{
-  size_t pos = 0;
-  while ( (pos = haystack.find(search, pos)) != std::wstring::npos ) {
-    haystack.replace(pos, search.size(), replace);
-    pos += replace.size();
-  }
-  return haystack;
-}
-
-const std::multimap<std::filesystem::path, std::vector<std::pair<std::wstring, std::wstring>>> get_or_load_addons()
+const std::vector<xml_snr_addon_base> &get_xml_snr_addons()
 {
   static std::once_flag once_flag;
-  static std::multimap<std::filesystem::path, std::vector<std::pair<std::wstring, std::wstring>>> addons;
+  static std::vector<xml_snr_addon_base> addons;
 
-  std::call_once(once_flag, [](std::multimap<std::filesystem::path, std::vector<std::pair<std::wstring, std::wstring>>> &addons) {
+  std::call_once(once_flag, [](std::vector<xml_snr_addon_base> &addons) {
     std::error_code ec;
-    for ( const auto &entry : std::filesystem::directory_iterator(documents_path() / L"BnS\\addons", ec) ) {
-      if ( entry.is_regular_file()
-        && FastWildCompareW(entry.path().filename().c_str(), L"*.patch") ) {
-        std::wifstream stream{entry.path()};
-        stream.imbue(std::locale(stream.getloc(), new std::codecvt_utf8<wchar_t, 0x10ffff, std::consume_header>));
+    for ( const auto &entry : std::filesystem::directory_iterator{documents_path() / L"BnS\\addons", ec} ) {
+      if ( !entry.is_regular_file() )
+        continue;
 
-        std::filesystem::path filename;
-        std::vector<std::wstring> stext;
-        std::vector<std::wstring> rtext;
-        std::wstring line;
-        while ( std::getline(stream, line) ) {
-          const auto ofs = line.find('=');
-          if ( ofs == std::wstring::npos )
-            continue;
-
-          std::wstring_view key{line.c_str(), ofs};
-          if ( const auto it = std::find_if_not(key.begin(), key.end(), ::iswspace); it != key.end() )
-            key.remove_prefix(std::distance(key.begin(), it));
-          if ( const auto it = std::find_if_not(key.rbegin(), key.rend(), ::iswspace); it != key.rend() )
-            key.remove_suffix(std::distance(key.rbegin(), it));
-
-          std::wstring_view value{&line[ofs + 1]};
-          if ( const auto it = std::find_if_not(value.begin(), value.end(), ::iswspace); it != value.end() )
-            value.remove_prefix(std::distance(value.begin(), it));
-          if ( const auto it = std::find_if_not(value.rbegin(), value.rend(), ::iswspace); it != value.rend() )
-            value.remove_suffix(std::distance(value.rbegin(), it));
-
-          switch ( fnv1a::make_hash(key) ) {
-            case L"FileName"_fnv1a: {
-              filename = std::filesystem::weakly_canonical(value).filename();
-              break;
-            } case L"Search"_fnv1a: {
-              std::wstring s{value};
-              stext.push_back(ReplaceStringInPlace(s, L"NewLine", L"\n"));
-              break;
-            } case L"Replace"_fnv1a: {
-              std::wstring s{value};
-              rtext.push_back(ReplaceStringInPlace(s, L"NewLine", L"\n"));
-              break;
-            }
-          }
-        }
-
-        if ( !filename.empty() && stext.size() == rtext.size() ) {
-          std::vector<std::pair<std::wstring, std::wstring>> vec;
-          vec.reserve(stext.size());
-          std::transform(stext.begin(), stext.end(), rtext.begin(), std::back_inserter(vec), [](std::wstring a, std::wstring b) {
-            return std::make_pair(a, b);
-          });
-          addons.emplace(filename, vec);
-        }
+      const auto &path = entry.path();
+      const auto ext = path.extension();
+      if ( _wcsicmp(ext.c_str(), L".patch") == 0 ) {
+        xml_snr_legacy_addon addon{path};
+        if ( addon.is_valid() )
+          addons.emplace_back(std::move(addon));
+      } else if ( _wcsicmp(ext.c_str(), L".xml") == 0 ) {
+        xml_snr_addon addon{path};
+        if ( addon.is_valid() )
+          addons.emplace_back(std::move(addon));
       }
     }
   }, addons);
@@ -85,15 +37,13 @@ std::filesystem::path documents_path()
   return result.get();
 }
 
-std::vector<std::pair<std::wstring, std::wstring>> get_relevant_addons(const wchar_t *xml)
+std::vector<std::reference_wrapper<const std::pair<std::wstring, std::wstring>>> get_relevant_addons(const wchar_t *xml)
 {
-  std::vector<std::pair<std::wstring, std::wstring>> relevant_addons;
-  const auto filename = PathFindFileNameW(xml);
-  for ( const auto &addon : get_or_load_addons() ) {
-    if ( !_wcsicmp(filename, addon.first.c_str()) )
-      relevant_addons.insert(relevant_addons.end(), addon.second.begin(), addon.second.end());
+  std::vector<std::reference_wrapper<const std::pair<std::wstring, std::wstring>>> v;
+  for ( const auto &addon : get_xml_snr_addons() ) {
+    addon.get(xml, v);
   }
-  return relevant_addons;
+  return v;
 }
 
 std::vector<pugi::xml_node> get_relevant_patches(const wchar_t *xml)

@@ -43,12 +43,12 @@
     <ClCompile Include="callbacks.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="xml_snr_addon.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="hooks.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\include\util.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="detours.hpp">
@@ -67,6 +67,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="xmlreader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="xml_snr_addon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
