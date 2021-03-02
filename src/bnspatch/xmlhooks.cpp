@@ -55,7 +55,6 @@ XmlDoc *thiscall_(ReadMem_hook, const XmlReader *thisptr, const unsigned char *m
 
       if ( res ) {
         //apply patches
-
         for ( const auto &patch : patches ) {
           std::unordered_map<std::wstring, pugi::xml_node> node_keys;
           patch_node(doc, res.encoding, doc, patch.children(), node_keys);
@@ -87,7 +86,10 @@ XmlDoc *thiscall_(ReadFile_hook, const XmlReader *thisptr, const wchar_t *xml, X
     pugi::xml_document doc;
     const auto res = convert_document(doc, xmlDoc);
     thisptr->Close(xmlDoc);
-    apply_patches(doc, res.encoding, patches);
+    for ( const auto &patch : patches ) {
+      std::unordered_map<std::wstring, pugi::xml_node> node_keys;
+      patch_node(doc, res.encoding, doc, patch.children(), node_keys);
+    }
 
     xml_buffer_writer writer;
     doc.save(writer, nullptr, pugi::format_raw | pugi::format_no_declaration, res.encoding);

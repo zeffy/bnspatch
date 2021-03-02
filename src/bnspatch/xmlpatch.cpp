@@ -88,7 +88,7 @@ const pugi::xml_document &get_or_load_patches()
 void preprocess(pugi::xml_document &patches_doc, const std::filesystem::path &path, std::unordered_set<std::wstring> &include_guard)
 {
   pugi::xml_document document;
-  if ( include_guard.emplace(std::move(path.string())).second
+  if ( include_guard.emplace(std::move(path.wstring())).second
     && try_load_file(document, path, pugi::parse_default | pugi::parse_pi)
     && !_wcsicmp(document.document_element().name(), L"patches") ) {
 
