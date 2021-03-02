@@ -95,8 +95,6 @@ xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
 
     if ( key == L"FileName" ) {
       if ( fname ) {
-        // New addon in same file, at this point Searches should match Replacements,
-        // and there should be a description.
         if ( search_vec.size() != replace_vec.size() ) {
           _map.clear();
           return;
