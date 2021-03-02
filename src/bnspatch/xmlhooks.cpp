@@ -31,9 +31,10 @@ XmlDoc *thiscall_(ReadMem_hook, const XmlReader *thisptr, const unsigned char *m
         thisptr->Close(xmlDoc);
 
         if ( !addons.empty() && res.encoding == pugi::encoding_utf16_le ) {
+          // write document preserving whitespace for addon compatibility
           xml_wstring_writer writer;
           doc.save(writer, L"", pugi::format_default | pugi::format_no_declaration, res.encoding);
-          
+
           // apply addons
           for ( const auto &addon : addons ) {
             const auto &ref = addon.get();
@@ -74,12 +75,13 @@ XmlDoc *thiscall_(ReadFile_hook, const XmlReader *thisptr, const wchar_t *xml, X
   auto patches = get_relevant_patches(xml);
   if ( !patches.empty() ) {
     pugi::xml_document doc;
-    if ( const auto res = convert_document(doc, xmlDoc) ) {
-      apply_patches(doc, res.encoding, patches);
-      xml_buffer_writer writer;
-      doc.save(writer, nullptr, pugi::format_raw | pugi::format_no_declaration, res.encoding);
-      return g_pfnReadMem(thisptr, writer.result.data(), SafeInt(writer.result.size()), xml, xmlPieceReader);
-    }
+    const auto res = convert_document(doc, xmlDoc);
+    thisptr->Close(xmlDoc);
+    apply_patches(doc, res.encoding, patches);
+
+    xml_buffer_writer writer;
+    doc.save(writer, nullptr, pugi::format_raw | pugi::format_no_declaration, res.encoding);
+    return g_pfnReadMem(thisptr, writer.result.data(), SafeInt(writer.result.size()), xml, xmlPieceReader);
   }
   return xmlDoc;
 }
