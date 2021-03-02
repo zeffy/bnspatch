@@ -21,6 +21,7 @@ XmlDoc *thiscall_(ReadMem_hook, const XmlReader *thisptr, const unsigned char *m
     if ( !patches.empty() || !addons.empty() ) {
       pugi::xml_document doc;
       pugi::xml_parse_result res;
+      xml_wstring_writer wswriter;
 
       if ( thisptr->IsBinary(mem, size) ) {
         auto xmlDoc = g_pfnReadMem(thisptr, mem, size, xmlFileNameForLogging, xmlPieceReader);
@@ -30,21 +31,26 @@ XmlDoc *thiscall_(ReadMem_hook, const XmlReader *thisptr, const unsigned char *m
         res = convert_document(doc, xmlDoc);
         thisptr->Close(xmlDoc);
 
-        if ( !addons.empty() && res.encoding == pugi::encoding_utf16_le ) {
+        if ( !addons.empty() ) {
           // write document preserving whitespace for addon compatibility
-          xml_wstring_writer writer;
-          doc.save(writer, L"", pugi::format_default | pugi::format_no_declaration, res.encoding);
+          doc.save(wswriter, L"", pugi::format_default | pugi::format_no_declaration, res.encoding);
 
           // apply addons
           for ( const auto &addon : addons ) {
             const auto &ref = addon.get();
-            xml_snr_addon_base::replace_all(writer.result, ref.first, ref.second);
+            xml_snr_addon_base::replace_all(wswriter.result, ref.first, ref.second);
           }
+
+          const auto cb = SafeInt(wswriter.result.size() * sizeof(wchar_t));
+
+          if ( patches.empty() )
+            return g_pfnReadMem(thisptr, reinterpret_cast<unsigned char *>(wswriter.result.data()), cb, xmlFileNameForLogging, xmlPieceReader);
+
           // reload document
-          res = doc.load_string(writer.result.c_str());
+          res = doc.load_buffer_inplace(wswriter.result.data(), cb, pugi::parse_default | pugi::parse_declaration);
         }
       } else {
-        res = doc.load_buffer(mem, size);
+        res = doc.load_buffer(mem, size, pugi::parse_default | pugi::parse_declaration);
       }
 
       if ( res ) {
@@ -72,7 +78,7 @@ XmlDoc *thiscall_(ReadFile_hook, const XmlReader *thisptr, const wchar_t *xml, X
   if ( !xmlDoc )
     return nullptr;
 
-  auto patches = get_relevant_patches(xml);
+  const auto patches = get_relevant_patches(xml);
   if ( !patches.empty() ) {
     pugi::xml_document doc;
     const auto res = convert_document(doc, xmlDoc);
