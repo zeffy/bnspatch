@@ -125,7 +125,7 @@ xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
     }
   }
 
-  if ( fname && description && search_vec.size() == replace_vec.size() ) {
+  if ( fname && search_vec.size() == replace_vec.size() ) {
     xml_snr_addon_data data;
     for ( const auto &[s, r] : boost::combine(search_vec, replace_vec) )
       data.snr.emplace_back(std::move(s), std::move(r));
