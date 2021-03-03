@@ -146,7 +146,7 @@ void patch_node(
 {
   for ( const auto &current : children ) {
     if ( ctx.attribute() ) {
-      switch ( fnv1a::make_hash(current.name(), fnv1a::ascii_toupper) ) {
+      switch ( fnv1a::make_hash(current.name()) ) {
         case L"parent"_fnv1a: // ok
           patch_node(doc, encoding, ctx.parent(), current.children(), node_keys);
           break;
@@ -188,27 +188,27 @@ void patch_node(
           return;
       }
     } else {
-      switch ( fnv1a::make_hash(current.name(), fnv1a::ascii_toupper) ) {
-        case L"save-file"_fnv1a:
-          if ( ctx.node().type() == pugi::node_document )
+      const auto hash = fnv1a::make_hash(current.name());
+      if ( ctx.node().type() == pugi::node_document ) {
+        switch ( hash ) {
+          case L"save-file"_fnv1a:
             doc.save_file(current.attribute(L"path").value(), L"", pugi::format_default | pugi::format_no_declaration, encoding);
-          break;
+            break;
 
-        case L"load-file"_fnv1a:
-          if ( ctx.node().type() == pugi::node_document )
+          case L"load-file"_fnv1a:
             doc.load_file(current.attribute(L"path").value(), pugi::parse_full);
-          break;
+            break;
 
-        case L"load-buffer"_fnv1a:
-          if ( ctx.node().type() == pugi::node_document )
+          case L"load-buffer"_fnv1a:
             doc.load_string(current.text().get());
-          break;
+            break;
 
-        case L"reset"_fnv1a:
-          if ( ctx.node().type() == pugi::node_document )
+          case L"reset"_fnv1a:
             doc.reset();
-          break;
-
+            break;
+        }
+      }
+      switch ( hash ) {
         case L"parent"_fnv1a: // ok
           patch_node(doc, encoding, ctx.parent(), current.children(), node_keys);
           break;
@@ -302,23 +302,23 @@ void patch_node(
           if ( const auto name = current.attribute(L"name") ) {
             patch_node(doc, encoding, ctx.node().find_child_by_attribute(
               name.value(),
-              current.attribute(L"attribute-name").value(),
-              current.attribute(L"attribute-value").value()),
+              current.attribute(L"name").value(),
+              current.attribute(L"value").value()),
               current.children(), node_keys);
           } else {
             patch_node(doc, encoding, ctx.node().find_child_by_attribute(
-              current.attribute(L"attribute-name").value(),
-              current.attribute(L"attribute-value").value()),
+              current.attribute(L"name").value(),
+              current.attribute(L"value").value()),
               current.children(), node_keys);
           }
           break;
 
         case L"first-attribute"_fnv1a: // ok
-          patch_node(doc, encoding, pugi::xpath_node(ctx.node().first_attribute(), ctx.node()), current.children(), node_keys);
+          patch_node(doc, encoding, {ctx.node().first_attribute(), ctx.node()}, current.children(), node_keys);
           break;
 
         case L"last-attribute"_fnv1a: // ok
-          patch_node(doc, encoding, pugi::xpath_node(ctx.node().last_attribute(), ctx.node()), current.children(), node_keys);
+          patch_node(doc, encoding, {ctx.node().last_attribute(), ctx.node()}, current.children(), node_keys);
           break;
 
         case L"first-child"_fnv1a: // ok
@@ -416,7 +416,7 @@ try_again:
   if ( !result && result.status != pugi::xml_parse_status::status_file_not_found ) {
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
     const auto description = converter.from_bytes(result.description());
-    const auto text = fmt::format(L"{}({}): {}", path.c_str(), result.offset, description);
+    const auto text = fmt::format(FMT_COMPILE(L"{}({}): {}"), path.c_str(), result.offset, description);
     switch ( MessageBoxW(nullptr, text.c_str(), L"bnspatch", MB_CANCELTRYCONTINUE | MB_ICONERROR) ) {
       case IDTRYAGAIN: goto try_again;
       case IDCONTINUE: break;

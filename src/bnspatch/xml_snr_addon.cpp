@@ -74,17 +74,17 @@ void xml_snr_legacy_addon::clean_snr_str(std::wstring &str)
 
 xml_snr_legacy_addon::xml_snr_legacy_addon(const std::filesystem::path &path)
 {
-  std::wstring line;
-  std::optional<std::wstring> fname;
-  std::vector<std::wstring> search_vec;
-  std::vector<std::wstring> replace_vec;
-  std::optional<std::wstring> description;
 
   _name = std::move(path.stem());
 
   std::wifstream stream{path};
   stream.imbue(std::locale{stream.getloc(), new std::codecvt_utf8<wchar_t, 0x10ffff, std::consume_header>});
 
+  std::wstring line;
+  std::optional<std::wstring> fname;
+  std::vector<std::wstring> search_vec;
+  std::vector<std::wstring> replace_vec;
+  std::optional<std::wstring> description;
   while ( std::getline(stream, line) ) {
     const auto ofs = line.find(L'=');
     if ( ofs == std::wstring::npos )
@@ -152,13 +152,11 @@ xml_snr_addon::xml_snr_addon(const std::filesystem::path &path)
 
     std::wstring fname{path_attribute.value()};
     clean_file_str(fname);
-
     if ( fname.empty() )
       continue;
 
     const auto search_rng = file_node.children(L"search");
     const auto replace_rng = file_node.children(L"replace");
-
     if ( std::distance(search_rng.begin(), search_rng.end()) != std::distance(replace_rng.begin(), replace_rng.end()) )
       continue;
 
