@@ -34,7 +34,7 @@ std::filesystem::path documents_path()
 {
   wil::unique_cotaskmem_string result;
   THROW_IF_FAILED(SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &result));
-  return result.get();
+  return {result.get()};
 }
 
 std::vector<std::reference_wrapper<const std::pair<std::wstring, std::wstring>>> get_relevant_addons(const wchar_t *xml)

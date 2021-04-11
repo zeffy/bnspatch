@@ -20,7 +20,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       if ( !ptr ) break;
 
       const std::span res{reinterpret_cast<PUCHAR>(ptr), count};
-      const std::vector block{res.begin(), res.end()};
+      const std::vector<UCHAR> block{res.begin(), res.end()};
 
       UINT len;
       PWSTR buffer;

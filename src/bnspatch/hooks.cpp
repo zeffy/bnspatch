@@ -302,3 +302,4 @@ HWND WINAPI FindWindowA_hook(
   }
   return g_pfnFindWindowA(lpClassName, lpWindowName);
 }
+
