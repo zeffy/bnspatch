@@ -16,15 +16,12 @@ DWORD WINAPI GetPrivateProfileStringW_hook(
 
   try {
     std::call_once(once, [&]() {
-      if ( !GClientVersion )
-        return;
-
       if ( !lpFileName || _wcsicmp(PathFindFileNameW(lpFileName), L"SystemText.ini") != 0 )
         throw std::exception{};
 
       for ( const auto &[hlib, plugin_info] : GPlugins ) {
         if ( plugin_info->oep_notify )
-          plugin_info->oep_notify(*GClientVersion);
+          plugin_info->oep_notify(GClientVersion);
       }
     });
   } catch ( ... ) {

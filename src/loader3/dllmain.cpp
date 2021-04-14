@@ -20,20 +20,29 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       if ( !ptr ) break;
 
       const std::span res{reinterpret_cast<PUCHAR>(ptr), count};
-      const std::vector<UCHAR> block{res.begin(), res.end()};
+      const std::vector block{res};
 
+      struct LANGANDCODEPAGE
+      {
+        WORD wLanguage;
+        WORD wCodePage;
+      };
+
+      LPVOID buffer;
       UINT len;
-      PWSTR buffer;
-      if ( !VerQueryValueW(block.data(), L"\\StringFileInfo\\040904b0\\OriginalFilename", reinterpret_cast<LPVOID *>(&buffer), &len) )
-        break;
+      if ( VerQueryValueW(block.data(), L"\\", &buffer, &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
+        const auto vsf = static_cast<VS_FIXEDFILEINFO *>(buffer);
+        GClientVersion = (static_cast<uint64_t>(vsf->dwProductVersionMS) << 32) | vsf->dwProductVersionLS;
+      }
+      if ( VerQueryValueW(block.data(), L"\\VarFileInfo\\Translation", &buffer, &len) ) {
+        for ( const auto &t : std::span{static_cast<LANGANDCODEPAGE *>(buffer), static_cast<size_t>(len) / sizeof(LANGANDCODEPAGE)} ) {
+          const auto subBlock = fmt::format(FMT_COMPILE(L"\\StringFileInfo\\{:04x}{:04x}\\OriginalFilename"), t.wLanguage, t.wCodePage);
 
-      switch ( fnv1a::make_hash(buffer, len - 1) ) {
-        case L"Client.exe"_fnv1a:
-        case L"BNSR.exe"_fnv1a: {
-          VS_FIXEDFILEINFO *vsf;
-          if ( VerQueryValueW(block.data(), L"\\", reinterpret_cast<LPVOID *>(&vsf), &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
-            GClientVersion.emplace(HIWORD(vsf->dwProductVersionMS), LOWORD(vsf->dwProductVersionMS), HIWORD(vsf->dwProductVersionLS), LOWORD(vsf->dwProductVersionLS));
+          if ( !VerQueryValueW(block.data(), subBlock.c_str(), &buffer, &len) )
+            continue;
 
+          const std::wstring_view originalFilename{static_cast<LPCWSTR>(buffer), len - 1};
+          if ( originalFilename != L"Client.exe"sv && originalFilename != L"BNSR.exe"sv ) {
             wil::unique_handle tokenHandle;
             THROW_IF_WIN32_BOOL_FALSE(OpenProcessToken(NtCurrentProcess(), TOKEN_WRITE, &tokenHandle));
             ULONG virtualizationEnabled = TRUE;
@@ -47,11 +56,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
           break;
         }
       }
-      break;
-    } case DLL_PROCESS_DETACH: {
-      if ( !lpReserved )
-        GPlugins.clear();
-      break;
     }
   }
   return TRUE;
@@ -89,9 +93,6 @@ inline void hide_from_peb(HMODULE hLibModule)
 
 void loader3_once_fx(LPCSTR pszDll)
 {
-  if ( !GClientVersion )
-    return;
-
   const auto Base = wil::GetModuleInstanceHandle();
   const auto ExportDir = nt::rtl::image_directory_entry_to_data<IMAGE_EXPORT_DIRECTORY>(Base, IMAGE_DIRECTORY_ENTRY_EXPORT);
   if ( !ExportDir )
@@ -107,7 +108,7 @@ void loader3_once_fx(LPCSTR pszDll)
   std::filesystem::path path;
   if ( const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR") ) {
     THROW_IF_WIN32_BOOL_FALSE(SetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR", nullptr));
-    std::filesystem::path tmp = wil::str_raw_ptr(str);
+    std::filesystem::path tmp{wil::str_raw_ptr(str)};
     if ( tmp.is_relative() )
       path = application_dir / tmp;
     else
@@ -122,8 +123,8 @@ void loader3_once_fx(LPCSTR pszDll)
       continue;
 
     const auto &filename = entry.path();
-    const auto ext = filename.extension();
-    if ( _wcsicmp(ext.c_str(), L".dll") != 0 )
+    const auto ext = filename.extension().wstring();
+    if ( CompareStringOrdinal(ext.c_str(), static_cast<int>(ext.size()), L".dll", -1, TRUE) != CSTR_EQUAL )
       continue;
 
     wil::unique_hmodule hlib{LoadLibraryExW(filename.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
@@ -140,7 +141,7 @@ void loader3_once_fx(LPCSTR pszDll)
     return lhs.second->priority > rhs.second->priority;
   });
   GPlugins.remove_if([](const auto &entry) {
-    return entry.second->init && !entry.second->init(*GClientVersion);
+    return entry.second->init && !entry.second->init(GClientVersion);
   });
   for ( const auto &[hlib, plugin_info] : GPlugins ) {
     if ( plugin_info->hide_from_peb )

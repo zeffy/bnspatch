@@ -74,7 +74,7 @@ struct version_t
 
 struct plugin_info_t
 {
-  version_t sdk_version{PLUGIN_SDK_VERSION};
+  version_t sdk_version = PLUGIN_SDK_VERSION;
   bool hide_from_peb;
   bool erase_pe_header;
   bool(__cdecl *init)(const version_t);
