@@ -123,8 +123,8 @@ void loader3_once_fx(LPCSTR pszDll)
       continue;
 
     const auto &filename = entry.path();
-    const auto ext = filename.extension().wstring();
-    if ( CompareStringOrdinal(ext.c_str(), static_cast<int>(ext.size()), L".dll", -1, TRUE) != CSTR_EQUAL )
+    const auto ext = filename.extension();
+    if ( _wcsicmp(ext.c_str(), L".dll") != 0 )
       continue;
 
     wil::unique_hmodule hlib{LoadLibraryExW(filename.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
