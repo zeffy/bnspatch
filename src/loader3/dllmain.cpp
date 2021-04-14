@@ -30,10 +30,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
       LPVOID buffer;
       UINT len;
-      if ( VerQueryValueW(block.data(), L"\\", &buffer, &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
-        const auto vsf = static_cast<VS_FIXEDFILEINFO *>(buffer);
-        GClientVersion = (static_cast<uint64_t>(vsf->dwProductVersionMS) << 32) | vsf->dwProductVersionLS;
-      }
       if ( VerQueryValueW(block.data(), L"\\VarFileInfo\\Translation", &buffer, &len) ) {
         for ( const auto &t : std::span{static_cast<LANGANDCODEPAGE *>(buffer), static_cast<size_t>(len) / sizeof(LANGANDCODEPAGE)} ) {
           const auto subBlock = fmt::format(FMT_COMPILE(L"\\StringFileInfo\\{:04x}{:04x}\\OriginalFilename"), t.wLanguage, t.wCodePage);
@@ -42,7 +38,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             continue;
 
           const std::wstring_view originalFilename{static_cast<LPCWSTR>(buffer), len - 1};
-          if ( originalFilename != L"Client.exe"sv && originalFilename != L"BNSR.exe"sv ) {
+          if ( originalFilename == L"Client.exe"sv || originalFilename == L"BNSR.exe"sv ) {
+            if ( VerQueryValueW(block.data(), L"\\", &buffer, &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
+              const auto vsf = static_cast<VS_FIXEDFILEINFO *>(buffer);
+              GClientVersion = (static_cast<uint64_t>(vsf->dwProductVersionMS) << 32) | vsf->dwProductVersionLS;
+            }
             wil::unique_handle tokenHandle;
             THROW_IF_WIN32_BOOL_FALSE(OpenProcessToken(NtCurrentProcess(), TOKEN_WRITE, &tokenHandle));
             ULONG virtualizationEnabled = TRUE;
