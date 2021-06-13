@@ -3,11 +3,8 @@
 #include <phnt.h>
 #include "pluginsdk.h"
 
-extern decltype(&GetPrivateProfileStringW) g_pfnGetPrivateProfileStringW;
-DWORD WINAPI GetPrivateProfileStringW_hook(
-  LPCWSTR lpAppName,
-  LPCWSTR lpKeyName,
-  LPCWSTR lpDefault,
-  LPWSTR lpReturnedString,
-  DWORD nSize,
-  LPCWSTR lpFileName);
+extern decltype(&GetSystemTimeAsFileTime) g_pfnGetSystemTimeAsFileTime;
+VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime);
+
+extern decltype(&RtlLeaveCriticalSection) g_pfnRtlLeaveCriticalSection;
+NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSection);

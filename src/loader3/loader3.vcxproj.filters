@@ -39,9 +39,6 @@
     <ClInclude Include="hooks.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\include\util.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="detours.hpp">
       <Filter>Header Files\detours</Filter>
     </ClInclude>

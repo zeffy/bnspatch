@@ -1,177 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<!-- ProjectConfigurations -->
-	<ItemGroup Label="ProjectConfigurations">
-		<ProjectConfiguration Include="Debug|Win32">
-			<Configuration>Debug</Configuration>
-			<Platform>Win32</Platform>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="MinSizeRelease|Win32">
-			<Configuration>MinSizeRelease</Configuration>
-			<Platform>Win32</Platform>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="Debug|x64">
-			<Configuration>Debug</Configuration>
-			<Platform>x64</Platform>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="MinSizeRelease|x64">
-			<Configuration>MinSizeRelease</Configuration>
-			<Platform>x64</Platform>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="Release|Win32">
-			<Configuration>Release</Configuration>
-			<Platform>Win32</Platform>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="Release|x64">
-			<Configuration>Release</Configuration>
-			<Platform>x64</Platform>
-		</ProjectConfiguration>
-	</ItemGroup>
-	<!-- Common settings -->
-	<PropertyGroup Label="Globals">
-		<ProjectGuid>{10EBDD32-551D-4EE1-AFD4-0B30BA852012}</ProjectGuid>
-		<VCProjectVersion>15.0</VCProjectVersion>
-		<Keyword>Win32Proj</Keyword>
-		<WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-		<ProjectName>loader3</ProjectName>
-		<TargetName>winmm</TargetName>
-	</PropertyGroup>
-	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-	<PropertyGroup Label="Configuration">
-		<ConfigurationType>DynamicLibrary</ConfigurationType>
-		<PlatformToolset>v142</PlatformToolset>
-		<CharacterSet>Unicode</CharacterSet>
-	</PropertyGroup>
-	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-	<ImportGroup Label="ExtensionSettings">
-		<Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
-	</ImportGroup>
-	<ImportGroup Label="Shared" />
-	<ImportGroup Label="PropertySheets">
-		<Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-	</ImportGroup>
-	<PropertyGroup>
-		<GenerateManifest>false</GenerateManifest>
-		<EmbedManifest>false</EmbedManifest>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Platform)'=='x64'">
-		<OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin64\</OutDir>
-		<IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin64\</IntDir>
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Platform)'=='Win32'">
-		<OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin\</OutDir>
-		<IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin\</IntDir>
-	</PropertyGroup>
-	<ItemDefinitionGroup>
-		<ClCompile>
-			<PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-			<PrecompiledHeader>Use</PrecompiledHeader>
-			<PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-			<WarningLevel>Level3</WarningLevel>
-			<ConformanceMode>true</ConformanceMode>
-			<LanguageStandard>stdcpplatest</LanguageStandard>
-			<ObjectFileName>$(IntDir)%(RelativeDir)%(Filename)%(Extension).obj</ObjectFileName>
-			<EnableEnhancedInstructionSet Condition="'$(Platform)'=='Win32'">StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
-			<MultiProcessorCompilation>true</MultiProcessorCompilation>
-			<AdditionalIncludeDirectories>$(SolutionDir)dependencies\cx_fnv1a\include;$(SolutionDir)dependencies\ntapi\include;$(SolutionDir)include</AdditionalIncludeDirectories>
-		</ClCompile>
-		<Link>
-			<SubSystem>Windows</SubSystem>
-			<AdditionalDependencies>ntdll.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
-			<ModuleDefinitionFile>$(TargetName)_$(PlatformShortName).def</ModuleDefinitionFile>
-			<DelayLoadDLLs>WINMM.dll;VERSION.dll</DelayLoadDLLs>
-			<AdditionalOptions>/MERGE:.detourd=.data /MERGE:.detourc=.rdata /MERGE:_RDATA=.rdata %(AdditionalOptions)</AdditionalOptions>
-		</Link>
-	</ItemDefinitionGroup>
-	<PropertyGroup Label="Vcpkg">
-		<VcpkgUseStatic>true</VcpkgUseStatic>
-	</PropertyGroup>
-	<!-- Debug -->
-	<PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
-		<UseDebugLibraries>true</UseDebugLibraries>
-	</PropertyGroup>
-	<ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
-		<ClCompile>
-			<PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-			<Optimization>Disabled</Optimization>
-			<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-		</ClCompile>
-		<Link>
-			<GenerateDebugInformation>true</GenerateDebugInformation>
-		</Link>
-	</ItemDefinitionGroup>
-	<!-- MinSizeRelease -->
-	<ItemDefinitionGroup Condition="'$(Configuration)'=='MinSizeRelease'">
-		<ClCompile>
-			<PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-			<BufferSecurityCheck>false</BufferSecurityCheck>
-			<ControlFlowGuard>false</ControlFlowGuard>
-			<DebugInformationFormat>None</DebugInformationFormat>
-			<FloatingPointModel>Fast</FloatingPointModel>
-			<FunctionLevelLinking>true</FunctionLevelLinking>
-			<IntrinsicFunctions>true</IntrinsicFunctions>
-			<MultiProcessorCompilation>true</MultiProcessorCompilation>
-			<Optimization>MaxSpeed</Optimization>
-			<PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-			<RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-			<UseFullPaths>false</UseFullPaths>
-			<WholeProgramOptimization>true</WholeProgramOptimization>
-		</ClCompile>
-		<Link>
-			<EnableCOMDATFolding>true</EnableCOMDATFolding>
-			<OptimizeReferences>true</OptimizeReferences>
-			<GenerateDebugInformation>false</GenerateDebugInformation>
-			<SetChecksum>true</SetChecksum>
-			<LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
-		</Link>
-	</ItemDefinitionGroup>
-	<PropertyGroup Label="Vcpkg" Condition="'$(Configuration)'=='MinSizeRelease'">
-		<VcpkgConfiguration>Release</VcpkgConfiguration>
-	</PropertyGroup>
-	<!-- Release -->
-	<ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
-		<ClCompile>
-			<PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-			<BufferSecurityCheck>false</BufferSecurityCheck>
-			<ControlFlowGuard>false</ControlFlowGuard>
-			<DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-			<FloatingPointModel>Fast</FloatingPointModel>
-			<FunctionLevelLinking>true</FunctionLevelLinking>
-			<IntrinsicFunctions>true</IntrinsicFunctions>
-			<MultiProcessorCompilation>true</MultiProcessorCompilation>
-			<Optimization>MaxSpeed</Optimization>
-			<PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-			<RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-			<UseFullPaths>false</UseFullPaths>
-			<WholeProgramOptimization>true</WholeProgramOptimization>
-		</ClCompile>
-		<Link>
-			<EnableCOMDATFolding>true</EnableCOMDATFolding>
-			<OptimizeReferences>true</OptimizeReferences>
-			<GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-			<SetChecksum>true</SetChecksum>
-			<LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
-		</Link>
-	</ItemDefinitionGroup>
-	<!-- Targets -->
-	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-	<ImportGroup Label="ExtensionTargets">
-		<Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
-	</ImportGroup>
-	<!-- Items -->
-	<ItemGroup>
-		<ClCompile Include="dllmain.cpp" />
-		<ClCompile Include="hooks.cpp" />
-		<ClCompile Include="pch.cpp">
-			<PrecompiledHeader>Create</PrecompiledHeader>
-		</ClCompile>
-		<ClCompile Include="globals.cpp" />
-	</ItemGroup>
-	<ItemGroup>
-		<ClInclude Include="..\..\include\util.hpp" />
-		<ClInclude Include="detours.hpp" />
-		<ClInclude Include="globals.h" />
-		<ClInclude Include="hooks.h" />
-		<ClInclude Include="pch.h" />
-	</ItemGroup>
+  <!-- ProjectConfigurations -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRelease|Win32">
+      <Configuration>MinSizeRelease</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRelease|x64">
+      <Configuration>MinSizeRelease</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <!-- Common settings -->
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{10EBDD32-551D-4EE1-AFD4-0B30BA852012}</ProjectGuid>
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>loader3</ProjectName>
+    <TargetName>winmm</TargetName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup>
+    <GenerateManifest>false</GenerateManifest>
+    <EmbedManifest>false</EmbedManifest>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='x64'">
+    <OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin64\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin64\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='Win32'">
+    <OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename)%(Extension).obj</ObjectFileName>
+      <EnableEnhancedInstructionSet Condition="'$(Platform)'=='Win32'">StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>$(SolutionDir)dependencies\cx_fnv1a\include;$(SolutionDir)dependencies\ntapi\include;$(SolutionDir)include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>ntdll.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>$(TargetName)_$(PlatformShortName).def</ModuleDefinitionFile>
+      <DelayLoadDLLs>WINMM.dll;VERSION.dll</DelayLoadDLLs>
+      <AdditionalOptions>/MERGE:.detourd=.data /MERGE:.detourc=.rdata /MERGE:_RDATA=.rdata %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <!-- Debug -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- MinSizeRelease -->
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='MinSizeRelease'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <ControlFlowGuard>false</ControlFlowGuard>
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <SetChecksum>true</SetChecksum>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)'=='MinSizeRelease'">
+    <VcpkgConfiguration>Release</VcpkgConfiguration>
+  </PropertyGroup>
+  <!-- Release -->
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <ControlFlowGuard>false</ControlFlowGuard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
+      <SetChecksum>true</SetChecksum>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Targets -->
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+  <!-- Items -->
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="hooks.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="globals.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="detours.hpp" />
+    <ClInclude Include="globals.h" />
+    <ClInclude Include="hooks.h" />
+    <ClInclude Include="pch.h" />
+  </ItemGroup>
 </Project>

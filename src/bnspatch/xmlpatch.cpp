@@ -343,7 +343,7 @@ void patch_node(
 
         case L"insert-copy-after"_fnv1a: // ok
           if ( const auto it = node_keys.find(current.attribute(L"node-key").value()); it != node_keys.end() )
-            patch_node(doc, encoding, it->second.parent().insert_move_before(ctx.node(), it->second), current.children(), node_keys);
+            patch_node(doc, encoding, it->second.parent().insert_copy_after(ctx.node(), it->second), current.children(), node_keys);
           break;
 
         case L"insert-copy-before"_fnv1a: // ok
