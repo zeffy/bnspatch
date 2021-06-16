@@ -142,7 +142,7 @@ constexpr auto operator"" _fnv1a(const char32_t *s, size_t len)
 #include <ntamd64.hpp>
 #include <ntmm.hpp>
 #include <ntrtl.hpp>
-#include "detours.hpp"
+#include <detours.hpp>
 
 #include <wil/stl.h>
 #include <wil/win32_helpers.h>

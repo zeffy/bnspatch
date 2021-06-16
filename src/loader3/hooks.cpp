@@ -32,10 +32,17 @@ NTSTATUS NTAPI LdrLoadDll_hook(
 {
   auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
   nt::rtl::unicode_string_view Name = *FullName;
+
   auto It = FullName->rbegin();
   for ( ; It != FullName->rend(); ++It ) {
-    if ( *It == OBJ_NAME_PATH_SEPARATOR )
-      Name = {&*It, SafeInt{std::distance(FullName->rbegin(), It)}};
+    if ( *It == '\\' || *It == '/' ) {
+      const safe_ptrdiff_t length = std::distance(FullName->rbegin(), It) * sizeof(WCHAR);
+      --It;
+      Name.Buffer = const_cast<PWCH>(&*It);
+      Name.Length = length;
+      Name.MaximumLength = length;
+      break;
+    }
   }
   if ( Name.istarts_with(L"aegisty") || Name.iequals(L"NCCrashReporter.dll") ) {
     *DllHandle = nullptr;
