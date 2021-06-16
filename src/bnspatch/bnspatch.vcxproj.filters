@@ -25,9 +25,6 @@
     <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="hooks.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -48,9 +45,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="hooks.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="detours.hpp">
       <Filter>Header Files\detours</Filter>
     </ClInclude>

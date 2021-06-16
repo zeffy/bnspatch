@@ -22,6 +22,8 @@
 #include <KnownFolders.h>
 #include <Shlwapi.h>
 #pragma comment( lib, "Shlwapi.lib" )
+#include <WS2tcpip.h>
+#pragma comment( lib, "Ws2_32.lib" )
 
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include <codecvt>
@@ -64,6 +66,7 @@ using safe_double = SafeInt<double>;
 #include <bitset>
 #include <chrono>
 #include <execution>
+#include <format>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -101,13 +104,38 @@ using namespace std::string_literals;
 #ifndef RESULT_DIAGNOSTICS_LEVEL
 #define RESULT_DIAGNOSTICS_LEVEL 0
 #endif
-#include <fmt/format.h>
-#include <fmt/chrono.h>
-#include <fmt/compile.h>
 
 #include <pugixml.hpp>
 
-#include <fnv1a.h>
+#include <muu/hashing.h>
+
+constexpr auto operator"" _fnv1a(const char *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+constexpr auto operator"" _fnv1a(const wchar_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+
+#if defined(__cpp_char8_t)
+constexpr auto operator"" _fnv1a(const char8_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+#endif
+#if defined(__cpp_unicode_characters)
+constexpr auto operator"" _fnv1a(const char16_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+
+constexpr auto operator"" _fnv1a(const char32_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+#endif
+
 #include <ntamd64.hpp>
 #include <ntmm.hpp>
 #include <ntrtl.hpp>

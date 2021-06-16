@@ -15,29 +15,64 @@
 #include <phnt.h>
 #pragma comment( lib, "ntdll.lib" )
 #pragma comment( lib, "version.lib" )
+#include <bcrypt.h>
+#pragma comment( lib, "bcrypt.lib" )
 #include <Winsock2.h>
 #include <ShlObj.h>
 #include <KnownFolders.h>
 #include <Shlwapi.h>
 #pragma comment( lib, "Shlwapi.lib" )
+#include <WS2tcpip.h>
+#pragma comment( lib, "Ws2_32.lib" )
 
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include <codecvt>
 
+#include <PathCch.h>
 #include <strsafe.h>
+
 #include <safeint.hpp>
+using uchar = unsigned char;
+using ushort = unsigned short;
+using uint = unsigned int;
+using ulong = unsigned long;
+using ullong = unsigned long long;
+using llong = long long;
+
+using safe_char = SafeInt<char>;
+using safe_uchar = SafeInt<uchar>;
+using safe_short = SafeInt<short>;
+using safe_ushort = SafeInt<ushort>;
+using safe_int = SafeInt<int>;
+using safe_uint = SafeInt<uint>;
+using safe_long = SafeInt<long>;
+using safe_ulong = SafeInt<ulong>;
+using safe_llong = SafeInt<llong>;
+using safe_ullong = SafeInt<ullong>;
+using safe_size_t = SafeInt<size_t>;
+using safe_ptrdiff_t = SafeInt<ptrdiff_t>;
+using safe_float = SafeInt<float>;
+using safe_double = SafeInt<double>;
+
+#include <cstdlib>
+#include <cstdio>
+#include <cassert>
+#include <cstring>
+#include <cstdint>
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <bitset>
 #include <chrono>
-#include <cstdint>
-#include <cstdlib>
+#include <execution>
+#include <format>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <optional>
 #include <queue>
 #include <random>
@@ -53,24 +88,57 @@
 #include <utility>
 #include <vector>
 
+#ifdef __cpp_lib_string_udls
 using namespace std::chrono_literals;
 using namespace std::string_view_literals;
 using namespace std::string_literals;
+#endif
 
-#if !defined(RESULT_DIAGNOSTICS_LEVEL)
-#define RESULT_DIAGNOSTICS_LEVEL 0
-#endif // !RESULT_DIAGNOSTICS_LEVEL
+#include <ppl.h>
+#include <concurrent_priority_queue.h>
+#include <concurrent_queue.h>
+#include <concurrent_unordered_map.h>
+#include <concurrent_unordered_set.h>
+#include <concurrent_vector.h>
 
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/range/combine.hpp>
 
-#include <fmt/format.h>
-#include <fmt/chrono.h>
-#include <fmt/compile.h>
+#ifndef RESULT_DIAGNOSTICS_LEVEL
+#define RESULT_DIAGNOSTICS_LEVEL 0
+#endif
 
 #include <pugixml.hpp>
 
-#include <fnv1a.h>
+#include <muu/hashing.h>
+
+constexpr auto operator"" _fnv1a(const char *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+constexpr auto operator"" _fnv1a(const wchar_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+
+#if defined(__cpp_char8_t)
+constexpr auto operator"" _fnv1a(const char8_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+#endif
+#if defined(__cpp_unicode_characters)
+constexpr auto operator"" _fnv1a(const char16_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+
+constexpr auto operator"" _fnv1a(const char32_t *s, size_t len)
+{
+  return muu::fnv1a{}({s, len}).value();
+}
+#endif
+
 #include <ntamd64.hpp>
 #include <ntmm.hpp>
 #include <ntrtl.hpp>

@@ -1,38 +1,8 @@
 #include "pch.h"
 #include <ehdata.h>
 #include <rttidata.h>
-#include "hooks.h"
 #include "pluginsdk.h"
 #include "xmlhooks.h"
-
-bool __cdecl init([[maybe_unused]] const version_t client_version)
-{
-  NtCurrentPeb()->BeingDebugged = FALSE;
-
-  THROW_IF_WIN32_ERROR(DetourTransactionBegin());
-  THROW_IF_WIN32_ERROR(DetourUpdateThread(NtCurrentThread()));
-
-  const auto hNtDll = GetModuleHandleW(RtlNtdllName);
-  THROW_LAST_ERROR_IF_NULL(hNtDll);
-#ifndef _WIN64
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "LdrGetDllHandle", &g_pfnLdrGetDllHandle, &LdrGetDllHandle_hook));
-#endif
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "LdrLoadDll", &g_pfnLdrLoadDll, LdrLoadDll_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtCreateFile", &g_pfnNtCreateFile, NtCreateFile_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtCreateMutant", &g_pfnNtCreateMutant, NtCreateMutant_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtOpenKeyEx", &g_pfnNtOpenKeyEx, NtOpenKeyEx_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtProtectVirtualMemory", &g_pfnNtProtectVirtualMemory, NtProtectVirtualMemory_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtQuerySystemInformation", &g_pfnNtQuerySystemInformation, NtQuerySystemInformation_hook));
-#ifdef _WIN64
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtQueryInformationProcess", &g_pfnNtQueryInformationProcess, NtQueryInformationProcess_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtSetInformationThread", &g_pfnNtSetInformationThread, NtSetInformationThread_hook));
-  THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtGetContextThread", &g_pfnNtGetContextThread, NtGetContextThread_hook));
-#endif
-
-  THROW_IF_WIN32_ERROR(DetourAttach(L"user32.dll", "FindWindowA", &g_pfnFindWindowA, FindWindowA_hook));
-  THROW_IF_WIN32_ERROR(DetourTransactionCommit());
-  return true;
-}
 
 void __cdecl oep_notify([[maybe_unused]] const version_t client_version)
 {
@@ -97,7 +67,6 @@ extern "C" __declspec(dllexport) plugin_info_t GPluginInfo = {
   .hide_from_peb = true,
   .erase_pe_header = true,
 #endif
-  .init = init,
   .oep_notify = oep_notify,
   .priority = 1
 };

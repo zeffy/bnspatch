@@ -1,8 +1,14 @@
 #pragma once
-#include <list>
-#include <utility>
-#include <wil/resource.h>
-#include <pluginsdk.h>
+
+#include "pch.h"
+#include "pluginsdk.h"
+
+struct plugin_item_struct
+{
+  wil::unique_hmodule hmodule;
+  const plugin_info_t *info;
+  std::filesystem::path path;
+};
 
 extern version_t GClientVersion;
-extern std::list<std::pair<wil::unique_hmodule, const plugin_info_t *>> GPlugins;
+extern std::list<plugin_item_struct> GPlugins;

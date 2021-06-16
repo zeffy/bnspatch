@@ -54,12 +54,12 @@
     <EmbedManifest>false</EmbedManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='x64'">
-    <OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin64\plugins\</OutDir>
-    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin64\</IntDir>
+    <OutDir>$(SolutionDir)bin\$(Configuration)\Win64\plugins\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\Win64\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
-    <OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\bin\plugins\</OutDir>
-    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\bin\</IntDir>
+    <OutDir>$(SolutionDir)bin\$(Configuration)\Win32\plugins\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\Win32\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -162,7 +162,6 @@
   <ItemGroup>
     <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="dllmain.cpp" />
-    <ClCompile Include="hooks.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -173,7 +172,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="detours.hpp" />
-    <ClInclude Include="hooks.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="xmlcommon.h" />
     <ClInclude Include="xmlhooks.h" />

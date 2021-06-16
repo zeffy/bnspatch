@@ -3,6 +3,363 @@
 #include "hooks.h"
 #include "pluginsdk.h"
 
+decltype(&LdrGetDllHandle) g_pfnLdrGetDllHandle;
+NTSTATUS NTAPI LdrGetDllHandle_hook(
+  PWSTR DllPath,
+  PULONG DllCharacteristics,
+  PUNICODE_STRING DllName,
+  PVOID *DllHandle)
+{
+  const auto Name = static_cast<nt::rtl::unicode_string_view *>(DllName);
+  if (
+#ifndef _WIN64
+    Name->iequals(L"kmon.dll") ||
+#endif
+    Name->iequals(L"dateinj01.dll")
+    ) {
+    DllHandle = nullptr;
+    return STATUS_DLL_NOT_FOUND;
+  }
+  return g_pfnLdrGetDllHandle(DllPath, DllCharacteristics, DllName, DllHandle);
+}
+
+decltype(&LdrLoadDll) g_pfnLdrLoadDll;
+NTSTATUS NTAPI LdrLoadDll_hook(
+  PWSTR DllPath,
+  PULONG DllCharacteristics,
+  PUNICODE_STRING DllName,
+  PVOID *DllHandle)
+{
+  auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
+  nt::rtl::unicode_string_view Name = *FullName;
+  auto It = FullName->rbegin();
+  for ( ; It != FullName->rend(); ++It ) {
+    if ( *It == OBJ_NAME_PATH_SEPARATOR )
+      Name = {&*It, SafeInt{std::distance(FullName->rbegin(), It)}};
+  }
+  if ( Name.istarts_with(L"aegisty") || Name.iequals(L"NCCrashReporter.dll") ) {
+    *DllHandle = nullptr;
+    return STATUS_DLL_NOT_FOUND;
+  }
+  return g_pfnLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
+}
+
+decltype(&NtCreateFile) g_pfnNtCreateFile;
+NTSTATUS NTAPI NtCreateFile_hook(
+  PHANDLE FileHandle,
+  ACCESS_MASK DesiredAccess,
+  POBJECT_ATTRIBUTES ObjectAttributes,
+  PIO_STATUS_BLOCK IoStatusBlock,
+  PLARGE_INTEGER AllocationSize,
+  ULONG FileAttributes,
+  ULONG ShareAccess,
+  ULONG CreateDisposition,
+  ULONG CreateOptions,
+  PVOID EaBuffer,
+  ULONG EaLength)
+{
+#ifndef _WIN64
+  constexpr std::array ObjectNames{
+    L"\\\\.\\SICE",
+    L"\\\\.\\SIWVID",
+    L"\\\\.\\NTICE",
+  };
+
+  const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
+  if ( std::ranges::any_of(ObjectNames, [ObjectName](const auto &Other) {
+    return ObjectName->iequals(Other);
+  }) ) {
+    return STATUS_OBJECT_NAME_NOT_FOUND;
+  }
+#endif
+  return g_pfnNtCreateFile(
+    FileHandle,
+    DesiredAccess,
+    ObjectAttributes,
+    IoStatusBlock,
+    AllocationSize,
+    FileAttributes,
+    ShareAccess ? ShareAccess : FILE_SHARE_READ,
+    CreateDisposition,
+    CreateOptions,
+    EaBuffer,
+    EaLength);
+}
+
+decltype(&NtCreateMutant) g_pfnNtCreateMutant;
+NTSTATUS NTAPI NtCreateMutant_hook(
+  PHANDLE MutantHandle,
+  ACCESS_MASK DesiredAccess,
+  POBJECT_ATTRIBUTES ObjectAttributes,
+  BOOLEAN InitialOwner)
+{
+  if ( ObjectAttributes ) {
+    const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
+    if ( ObjectName->istarts_with(L"BnSGameClient") ) {
+      ObjectAttributes->ObjectName = nullptr;
+      ObjectAttributes->Attributes &= ~OBJ_OPENIF;
+      ObjectAttributes->RootDirectory = nullptr;
+    }
+  }
+  return g_pfnNtCreateMutant(MutantHandle, DesiredAccess, ObjectAttributes, InitialOwner);
+}
+
+decltype(&NtOpenKeyEx) g_pfnNtOpenKeyEx;
+NTSTATUS NTAPI NtOpenKeyEx_hook(
+  PHANDLE KeyHandle,
+  ACCESS_MASK DesiredAccess,
+  POBJECT_ATTRIBUTES ObjectAttributes,
+  ULONG OpenOptions)
+{
+  constexpr std::array ObjectNames{
+    L"Software\\Wine",
+    L"HARDWARE\\ACPI\\DSDT\\VBOX__"
+  };
+
+  const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
+  if ( std::ranges::any_of(ObjectNames, [ObjectName](const auto &Other) {
+    return ObjectName->iequals(Other);
+  }) ) {
+    return STATUS_OBJECT_NAME_NOT_FOUND;
+  }
+  return g_pfnNtOpenKeyEx(KeyHandle, DesiredAccess, ObjectAttributes, OpenOptions);
+}
+
+decltype(&NtProtectVirtualMemory) g_pfnNtProtectVirtualMemory;
+NTSTATUS NTAPI NtProtectVirtualMemory_hook(
+  HANDLE ProcessHandle,
+  PVOID *BaseAddress,
+  PSIZE_T RegionSize,
+  ULONG NewProtect,
+  PULONG OldProtect)
+{
+  PROCESS_BASIC_INFORMATION ProcessInfo;
+  SYSTEM_BASIC_INFORMATION SystemInfo;
+  PVOID StartingAddress;
+
+  if ( (NewProtect & PAGE_WRITE_ANY) != 0
+    && (ProcessHandle == NtCurrentProcess()
+      || (SUCCEEDED_NTSTATUS(NtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &ProcessInfo, sizeof(PROCESS_BASIC_INFORMATION), nullptr))
+        && ProcessInfo.UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess))
+    && SUCCEEDED_NTSTATUS(NtQuerySystemInformation(SystemBasicInformation, &SystemInfo, sizeof(SYSTEM_BASIC_INFORMATION), nullptr)) ) {
+
+    __try {
+      StartingAddress = PAGE_ALIGN(*BaseAddress);
+    } __except ( EXCEPTION_EXECUTE_HANDLER ) {
+      return GetExceptionCode();
+    }
+
+    if ( StartingAddress == PAGE_ALIGN(&DbgBreakPoint)
+      || StartingAddress == PAGE_ALIGN(&DbgUiRemoteBreakin) )
+      return STATUS_INVALID_PARAMETER_2;
+  }
+  return g_pfnNtProtectVirtualMemory(ProcessHandle, BaseAddress, RegionSize, NewProtect, OldProtect);
+}
+
+decltype(&NtQueryInformationProcess) g_pfnNtQueryInformationProcess;
+NTSTATUS NTAPI NtQueryInformationProcess_hook(
+  HANDLE ProcessHandle,
+  PROCESSINFOCLASS ProcessInformationClass,
+  PVOID ProcessInformation,
+  ULONG ProcessInformationLength,
+  PULONG ReturnLength)
+{
+  PROCESS_BASIC_INFORMATION ProcessInfo;
+
+  if ( ProcessHandle == NtCurrentProcess()
+    || (SUCCEEDED_NTSTATUS(g_pfnNtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &ProcessInfo, sizeof(PROCESS_BASIC_INFORMATION), nullptr))
+      && ProcessInfo.UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess) ) {
+
+    switch ( ProcessInformationClass ) {
+      case ProcessDebugPort:
+        if ( ProcessInformationLength != sizeof(DWORD_PTR) )
+          return STATUS_INFO_LENGTH_MISMATCH;
+        *(PDWORD_PTR)ProcessInformation = 0;
+        if ( ReturnLength )
+          *ReturnLength = sizeof(DWORD_PTR);
+        return STATUS_SUCCESS;
+
+      case ProcessDebugObjectHandle:
+        if ( ProcessInformationLength != sizeof(HANDLE) )
+          return STATUS_INFO_LENGTH_MISMATCH;
+        *(PHANDLE)ProcessInformation = nullptr;
+        if ( ReturnLength )
+          *ReturnLength = sizeof(HANDLE);
+        return STATUS_PORT_NOT_SET;
+    }
+  }
+  return g_pfnNtQueryInformationProcess(
+    ProcessHandle,
+    ProcessInformationClass,
+    ProcessInformation,
+    ProcessInformationLength,
+    ReturnLength);
+}
+
+decltype(&NtQuerySystemInformation) g_pfnNtQuerySystemInformation;
+NTSTATUS NTAPI NtQuerySystemInformation_hook(
+  SYSTEM_INFORMATION_CLASS SystemInformationClass,
+  PVOID SystemInformation,
+  ULONG SystemInformationLength,
+  PULONG ReturnLength)
+{
+  switch ( SystemInformationClass ) {
+    case SystemModuleInformation:
+      if ( SystemInformationLength < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) )
+        return STATUS_INFO_LENGTH_MISMATCH;
+      return STATUS_ACCESS_DENIED;
+
+    case SystemModuleInformationEx:
+      if ( SystemInformationLength < sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) )
+        return STATUS_INFO_LENGTH_MISMATCH;
+      return STATUS_ACCESS_DENIED;
+
+    case SystemKernelDebuggerInformation:
+      if ( SystemInformationLength < sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION) )
+        return STATUS_INFO_LENGTH_MISMATCH;
+      ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerEnabled = FALSE;
+      ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerNotPresent = TRUE;
+      if ( ReturnLength )
+        *ReturnLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);
+      return STATUS_SUCCESS;
+  }
+  return g_pfnNtQuerySystemInformation(
+    SystemInformationClass,
+    SystemInformation,
+    SystemInformationLength,
+    ReturnLength);
+}
+
+decltype(&NtSetInformationThread) g_pfnNtSetInformationThread;
+NTSTATUS NTAPI NtSetInformationThread_hook(
+  HANDLE ThreadHandle,
+  THREADINFOCLASS ThreadInformationClass,
+  PVOID ThreadInformation,
+  ULONG ThreadInformationLength)
+{
+  THREAD_BASIC_INFORMATION ThreadInfo;
+
+  if ( ThreadInformationClass == ThreadHideFromDebugger ) {
+    if ( ThreadInformationLength != 0 )
+      return STATUS_INFO_LENGTH_MISMATCH;
+
+    if ( ThreadHandle == NtCurrentThread()
+      || (SUCCEEDED_NTSTATUS(NtQueryInformationThread(ThreadHandle, ThreadBasicInformation, &ThreadInfo, sizeof(THREAD_BASIC_INFORMATION), 0))
+        && ThreadInfo.ClientId.UniqueProcess == NtCurrentTeb()->ClientId.UniqueProcess) )
+      return STATUS_SUCCESS;
+  }
+  return g_pfnNtSetInformationThread(ThreadHandle, ThreadInformationClass, ThreadInformation, ThreadInformationLength);
+}
+
+decltype(&NtGetContextThread) g_pfnNtGetContextThread;
+NTSTATUS NTAPI NtGetContextThread_hook(
+  HANDLE ThreadHandle,
+  PCONTEXT ThreadContext)
+{
+  THREAD_BASIC_INFORMATION ThreadInfo;
+  DWORD ContextFlags = 0;
+
+  if ( ThreadHandle == NtCurrentThread()
+    || (SUCCEEDED_NTSTATUS(NtQueryInformationThread(ThreadHandle, ThreadBasicInformation, &ThreadInfo, sizeof(THREAD_BASIC_INFORMATION), 0))
+      && ThreadInfo.ClientId.UniqueProcess == NtCurrentTeb()->ClientId.UniqueProcess) ) {
+
+    __try {
+      ContextFlags = ThreadContext->ContextFlags;
+      ThreadContext->ContextFlags &= ~CONTEXT_DEBUG_REGISTERS;
+    } __except ( EXCEPTION_EXECUTE_HANDLER ) {
+      return GetExceptionCode();
+    }
+  }
+
+  const auto status = g_pfnNtGetContextThread(ThreadHandle, ThreadContext);
+  if ( FAILED_NTSTATUS(status) )
+    return status;
+
+  ThreadContext->ContextFlags = ContextFlags;
+  if ( (ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS ) {
+    ThreadContext->Dr0 = 0;
+    ThreadContext->Dr1 = 0;
+    ThreadContext->Dr2 = 0;
+    ThreadContext->Dr3 = 0;
+    ThreadContext->Dr6 = 0;
+    ThreadContext->Dr7 = 0;
+#ifdef _WIN64
+    ThreadContext->LastBranchToRip = 0;
+    ThreadContext->LastBranchFromRip = 0;
+    ThreadContext->LastExceptionToRip = 0;
+    ThreadContext->LastExceptionFromRip = 0;
+#endif
+  }
+  return status;
+}
+
+decltype(&NtCreateThreadEx) g_pfnNtCreateThreadEx;
+NTSTATUS NTAPI NtCreateThreadEx_hook(
+  PHANDLE ThreadHandle,
+  ACCESS_MASK DesiredAccess,
+  POBJECT_ATTRIBUTES ObjectAttributes,
+  HANDLE ProcessHandle,
+  PVOID StartRoutine, // PUSER_THREAD_START_ROUTINE
+  PVOID Argument,
+  ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
+  SIZE_T ZeroBits,
+  SIZE_T StackSize,
+  SIZE_T MaximumStackSize,
+  PPS_ATTRIBUTE_LIST AttributeList)
+{
+  PROCESS_BASIC_INFORMATION ProcessInfo;
+
+  if ( ProcessHandle == NtCurrentProcess()
+    || (SUCCEEDED_NTSTATUS(g_pfnNtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &ProcessInfo, sizeof(PROCESS_BASIC_INFORMATION), nullptr))
+      && ProcessInfo.UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess) ) {
+
+    const auto Entry = nt::rtl::pc_to_ldr_data_table_entry(StartRoutine);
+    if ( Entry && Entry->DllBase == NtCurrentPeb()->ImageBaseAddress ) {
+      const auto Sections = nt::rtl::image_sections(Entry->DllBase);
+      const auto Section = nt::rtl::find_image_section_by_name(Sections, ".winlice");
+      if ( Section != Sections.end() ) {
+        const auto Start = nt::rtl::image_rva_to_va<uchar>(Entry->DllBase, Section->VirtualAddress);
+        const auto End = Start + Section->Misc.VirtualSize;
+        if ( StartRoutine >= Start && StartRoutine < End ) {
+          const auto BaseDllName = static_cast<nt::rtl::unicode_string_view *>(&Entry->BaseDllName);
+          const auto text = std::format(L"[loader3] Refusing thread creation at entry {:.{}}+{:#x}.\n",
+            BaseDllName->data(),
+            BaseDllName->size(),
+            (ULONG_PTR)StartRoutine - (ULONG_PTR)Entry->DllBase);
+          OutputDebugStringW(text.c_str());
+          return STATUS_INSUFFICIENT_RESOURCES;
+        }
+      }
+    }
+  }
+  return g_pfnNtCreateThreadEx(
+    ThreadHandle,
+    DesiredAccess,
+    ObjectAttributes,
+    ProcessHandle,
+    StartRoutine,
+    Argument,
+    CreateFlags & ~THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER,
+    ZeroBits,
+    StackSize,
+    MaximumStackSize,
+    AttributeList);
+}
+
+typedef LOGICAL NTAPI RTL_RUN_ONCE_INIT_FN(
+  _Inout_ PRTL_RUN_ONCE RunOnce,
+  _Inout_opt_ PVOID Parameter,
+  _Inout_opt_ PVOID *Context
+);
+typedef RTL_RUN_ONCE_INIT_FN *PRTL_RUN_ONCE_INIT_FN;
+
+NTSYSAPI NTSTATUS RtlRunOnceExecuteOnce(
+  PRTL_RUN_ONCE         RunOnce,
+  PRTL_RUN_ONCE_INIT_FN InitFn,
+  PVOID                 Parameter,
+  PVOID *Context
+);
+
 static inline void hide_from_peb(HMODULE hLibModule)
 {
   const auto cs = static_cast<nt::rtl::critical_section *>(NtCurrentPeb()->LoaderLock);
@@ -36,28 +393,31 @@ static inline void hide_from_peb(HMODULE hLibModule)
 decltype(&RtlLeaveCriticalSection) g_pfnRtlLeaveCriticalSection;
 NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSection)
 {
-  static std::atomic_flag flag;
+  // We have to be careful inside this hook, as it could deadlock very easily.
 
-  const auto Status = g_pfnRtlLeaveCriticalSection(CriticalSection);
+  static std::atomic_flag flag = ATOMIC_FLAG_INIT;
 
-  if ( NT_SUCCESS(Status)
-    && CriticalSection == NtCurrentPeb()->LoaderLock
-    && CriticalSection->OwningThread == nullptr
+  const auto status = g_pfnRtlLeaveCriticalSection(CriticalSection);
+  if ( FAILED_NTSTATUS(status) )
+    return status;
+
+  if ( CriticalSection == NtCurrentPeb()->LoaderLock
+    && !RtlIsCriticalSectionLocked(CriticalSection)
     && !flag.test_and_set() ) {
 
-    std::filesystem::path application_dir{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
-    application_dir.remove_filename();
+    std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
+    path.remove_filename();
 
-    std::filesystem::path path;
-    if ( const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR") ) {
+    const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR");
+    if ( str ) {
       THROW_IF_WIN32_BOOL_FALSE(SetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR", nullptr));
       std::filesystem::path tmp{wil::str_raw_ptr(str)};
       if ( tmp.is_relative() )
-        path = application_dir / tmp;
+        path /= tmp;
       else
         path = std::move(tmp);
     } else {
-      path = application_dir / L"plugins";
+      path /= L"plugins"s;
     }
 
     std::error_code ec;
@@ -72,56 +432,91 @@ NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSectio
       wil::unique_hmodule hlib{LoadLibraryExW(entry.path().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
       if ( hlib ) {
         const auto plugin_info = reinterpret_cast<const plugin_info_t *>(GetProcAddress(hlib.get(), "GPluginInfo"));
-        if ( !plugin_info )
-          continue;
-
-        if ( plugin_info->sdk_version == PLUGIN_SDK_VERSION )
-          GPlugins.emplace_back(std::move(hlib), plugin_info);
+        if ( plugin_info && plugin_info->sdk_version == PLUGIN_SDK_VERSION )
+          GPlugins.emplace_back(std::move(hlib), plugin_info, entry.path());
       }
     }
-    std::stable_sort(GPlugins.begin(), GPlugins.end(), [](const auto &lhs, const auto &rhs) {
-      return lhs.second->priority > rhs.second->priority;
+    GPlugins.sort([](const auto &lhs, const auto &rhs) {
+      return lhs.info->priority > rhs.info->priority;
     });
-    GPlugins.remove_if([](const auto &entry) {
-      return entry.second->init && !entry.second->init(GClientVersion);
+    std::erase_if(GPlugins, [](const auto &item) {
+      // here I'm specifically not calling the init function for bnspatch
+      // so that using an older build that still has anti-anti-debug hooks
+      // won't break everything. xml patching is unaffected.
+      const auto stem = item.path.stem();
+      return _wcsicmp(stem.c_str(), L"bnspatch") != 0 && item.info->init && !item.info->init(GClientVersion);
     });
-    for ( const auto &[hlib, plugin_info] : GPlugins ) {
-      if ( plugin_info->hide_from_peb )
-        hide_from_peb(hlib.get());
+    for ( const auto &item : GPlugins ) {
+      if ( item.info->hide_from_peb )
+        hide_from_peb(item.hmodule.get());
 
-      if ( plugin_info->erase_pe_header ) {
-        const auto nt_headers = nt::rtl::image_nt_headers(hlib.get());
-        const nt::rtl::protect_memory protect{hlib.get(), nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READWRITE};
-        SecureZeroMemory(hlib.get(), nt_headers->OptionalHeader.SizeOfHeaders);
+      if ( item.info->erase_pe_header ) {
+        const auto nt_headers = nt::rtl::image_nt_headers(item.hmodule.get());
+        const nt::rtl::protect_memory protect{item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READWRITE};
+        SecureZeroMemory(item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders);
       }
+      const auto text = std::format(L"[loader3] Loaded plugin: \"{}\" ({:#x})", item.path.c_str(), reinterpret_cast<uintptr_t>(item.hmodule.get()));
+      OutputDebugStringW(text.c_str());
     }
   }
-  return Status;
+  return status;
+}
+
+HWND(NTAPI *g_pfnNtUserFindWindowEx)(HWND, HWND, PUNICODE_STRING, PUNICODE_STRING, DWORD);
+HWND NTAPI NtUserFindWindowEx_hook(
+  HWND hwndParent,
+  HWND hwndChild,
+  PUNICODE_STRING pstrClassName,
+  PUNICODE_STRING pstrWindowName,
+  DWORD dwType)
+{
+  constexpr std::array ClassNames{
+#ifndef _WIN64
+    L"OLLYDBG",
+    L"GBDYLLO",
+    L"pediy06",
+#endif         
+    L"FilemonClass",
+    L"PROCMON_WINDOW_CLASS",
+    L"RegmonClass",
+    L"18467-41"
+  };
+  constexpr std::array WindowNames{
+    L"File Monitor - Sysinternals: www.sysinternals.com",
+    L"Process Monitor - Sysinternals: www.sysinternals.com",
+    L"Registry Monitor - Sysinternals: www.sysinternals.com"
+  };
+  const auto ClassName = static_cast<nt::rtl::unicode_string_view *>(pstrClassName);
+  const auto WindowName = static_cast<nt::rtl::unicode_string_view *>(pstrWindowName);
+  if ( (ClassName && std::ranges::any_of(ClassNames, [ClassName](const auto &Other) { return ClassName->iequals(Other); }))
+    || (WindowName && std::ranges::any_of(WindowNames, [WindowName](const auto &Other) { return WindowName->equals(Other); })) ) {
+    return nullptr;
+  }
+  return g_pfnNtUserFindWindowEx(hwndParent, hwndChild, pstrClassName, pstrWindowName, dwType);
 }
 
 decltype(&GetSystemTimeAsFileTime) g_pfnGetSystemTimeAsFileTime;
 VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
 {
-  static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
+  static INIT_ONCE once;
 
-  PVOID buffer[16];
-  std::span callers{buffer, static_cast<size_t>(RtlWalkFrameChain(buffer, ARRAYSIZE(buffer), 0))};
-  InitOnceExecuteOnce(&InitOnce, [](PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context) -> BOOL {
-    const auto callers = reinterpret_cast<std::span<PVOID> *>(Parameter);
+  std::array<PVOID, 64> Buffer;
+  const auto Count = RtlWalkFrameChain(Buffer.data(), SafeInt{Buffer.size()}, 0);
+  const std::span<PVOID> Callers{Buffer.data(), Count};
+  wil::init_once_nothrow(once, [&Callers]() {
     MEMORY_BASIC_INFORMATION mbi;
-    const auto it = std::find_if(callers->begin(), callers->end(), [&](PVOID caller) {
-      return VirtualQuery(caller, &mbi, sizeof(MEMORY_BASIC_INFORMATION)) != 0
+    const auto it = std::ranges::find_if(Callers, [&](PVOID Caller) {
+      return VirtualQuery(Caller, &mbi, sizeof(MEMORY_BASIC_INFORMATION)) != 0
         && (mbi.State == MEM_COMMIT && (mbi.Protect & 0xff) != PAGE_NOACCESS && (mbi.Protect & PAGE_GUARD) == 0)
         && mbi.AllocationBase != wil::GetModuleInstanceHandle();
     });
-    if ( it != callers->end() && mbi.AllocationBase == NtCurrentPeb()->ImageBaseAddress ) {
-      for ( const auto &[hlib, plugin_info] : GPlugins ) {
-        if ( plugin_info->oep_notify )
-          plugin_info->oep_notify(GClientVersion);
-      }
-      return TRUE;
+    if ( it == Callers.end() || mbi.AllocationBase != NtCurrentPeb()->ImageBaseAddress )
+      return E_FAIL;
+    for ( const auto &item : GPlugins ) {
+      if ( item.info->oep_notify )
+        item.info->oep_notify(GClientVersion);
     }
-    return FALSE;
-  }, &callers, nullptr);
+    return S_OK;
+  });
   return g_pfnGetSystemTimeAsFileTime(lpSystemTimeAsFileTime);
 }

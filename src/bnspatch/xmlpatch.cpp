@@ -146,7 +146,7 @@ void patch_node(
 {
   for ( const auto &current : children ) {
     if ( ctx.attribute() ) {
-      switch ( fnv1a::make_hash(current.name()) ) {
+      switch ( muu::fnv1a{}(current.name()).value() ) {
         case L"parent"_fnv1a: // ok
           patch_node(doc, encoding, ctx.parent(), current.children(), node_keys);
           break;
@@ -188,7 +188,7 @@ void patch_node(
           return;
       }
     } else {
-      const auto hash = fnv1a::make_hash(current.name());
+      const auto hash = muu::fnv1a{}(current.name()).value();
       if ( ctx.node().type() == pugi::node_document ) {
         switch ( hash ) {
           case L"save-file"_fnv1a:
@@ -416,7 +416,7 @@ try_again:
   if ( !result && result.status != pugi::xml_parse_status::status_file_not_found ) {
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
     const auto description = converter.from_bytes(result.description());
-    const auto text = fmt::format(FMT_COMPILE(L"{}({}): {}"), path.c_str(), result.offset, description);
+    const auto text = std::format(L"{}({}): {}", path.c_str(), result.offset, description);
     switch ( MessageBoxW(nullptr, text.c_str(), L"bnspatch", MB_CANCELTRYCONTINUE | MB_ICONERROR) ) {
       case IDTRYAGAIN: goto try_again;
       case IDCONTINUE: break;
