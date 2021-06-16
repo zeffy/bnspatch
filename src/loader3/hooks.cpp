@@ -346,20 +346,6 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
     AttributeList);
 }
 
-typedef LOGICAL NTAPI RTL_RUN_ONCE_INIT_FN(
-  _Inout_ PRTL_RUN_ONCE RunOnce,
-  _Inout_opt_ PVOID Parameter,
-  _Inout_opt_ PVOID *Context
-);
-typedef RTL_RUN_ONCE_INIT_FN *PRTL_RUN_ONCE_INIT_FN;
-
-NTSYSAPI NTSTATUS RtlRunOnceExecuteOnce(
-  PRTL_RUN_ONCE         RunOnce,
-  PRTL_RUN_ONCE_INIT_FN InitFn,
-  PVOID                 Parameter,
-  PVOID *Context
-);
-
 static inline void hide_from_peb(HMODULE hLibModule)
 {
   const auto cs = static_cast<nt::rtl::critical_section *>(NtCurrentPeb()->LoaderLock);
