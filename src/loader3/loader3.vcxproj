@@ -162,6 +162,7 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="hooks.cpp" />
+    <ClCompile Include="vendor.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -172,5 +173,6 @@
     <ClInclude Include="globals.h" />
     <ClInclude Include="hooks.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="vendor.h" />
   </ItemGroup>
 </Project>

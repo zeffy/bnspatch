@@ -67,7 +67,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "RtlLeaveCriticalSection", &g_pfnRtlLeaveCriticalSection, RtlLeaveCriticalSection_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(L"kernel32.dll", "GetSystemTimeAsFileTime", &g_pfnGetSystemTimeAsFileTime, GetSystemTimeAsFileTime_hook));
             const auto win32err = DetourAttach(L"user32.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook);
-            
             if ( FAILED_WIN32(win32err) ) {
               if ( win32err == ERROR_PROC_NOT_FOUND )
                 THROW_IF_WIN32_ERROR(DetourAttach(L"win32u.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook));
@@ -90,11 +89,11 @@ const PfnDliHook __pfnDliNotifyHook2 = [](unsigned dliNotify, PDelayLoadInfo pdl
   switch ( dliNotify ) {
     case dliNotePreLoadLibrary: {
       std::wstring result;
-      if ( SUCCEEDED(wil::GetSystemDirectoryW(result)) ) {
-        std::filesystem::path path{std::move(result)};
-        path /= pdli->szDll;
-        return reinterpret_cast<FARPROC>(LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH));
-      }
+      THROW_IF_NTSTATUS_FAILED(wil::GetSystemDirectoryW(result));
+
+      std::filesystem::path path{std::move(result)};
+      path /= pdli->szDll;
+      return reinterpret_cast<FARPROC>(LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH));
       break;
     }
   }

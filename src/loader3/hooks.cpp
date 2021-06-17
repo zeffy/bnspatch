@@ -2,6 +2,7 @@
 #include "globals.h"
 #include "hooks.h"
 #include "pluginsdk.h"
+#include "vendor.h"
 
 decltype(&LdrGetDllHandle) g_pfnLdrGetDllHandle;
 NTSTATUS NTAPI LdrGetDllHandle_hook(
@@ -30,20 +31,9 @@ NTSTATUS NTAPI LdrLoadDll_hook(
   PUNICODE_STRING DllName,
   PVOID *DllHandle)
 {
-  auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
-  nt::rtl::unicode_string_view Name = *FullName;
+  const auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
+  auto Name = *FullName;
 
-  auto It = FullName->rbegin();
-  for ( ; It != FullName->rend(); ++It ) {
-    if ( *It == '\\' || *It == '/' ) {
-      const safe_ptrdiff_t length = std::distance(FullName->rbegin(), It) * sizeof(WCHAR);
-      --It;
-      Name.Buffer = const_cast<PWCH>(&*It);
-      Name.Length = length;
-      Name.MaximumLength = length;
-      break;
-    }
-  }
   if ( Name.istarts_with(L"aegisty") || Name.iequals(L"NCCrashReporter.dll") ) {
     *DllHandle = nullptr;
     return STATUS_DLL_NOT_FOUND;
@@ -211,13 +201,53 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
   PULONG ReturnLength)
 {
   switch ( SystemInformationClass ) {
+    case SystemProcessInformation:
+    case SystemSessionProcessInformation:
+    case SystemExtendedProcessInformation:
+    case SystemFullProcessInformation: {
+      const auto Status = g_pfnNtQuerySystemInformation(SystemInformationClass, SystemInformation, SystemInformationLength, ReturnLength);
+      if ( FAILED_NTSTATUS(Status) )
+        return Status;
+
+      const auto ProcessInformation = SystemInformationClass == SystemSessionProcessInformation
+        ? (PSYSTEM_PROCESS_INFORMATION)((PSYSTEM_SESSION_PROCESS_INFORMATION)SystemInformation)->Buffer
+        : (PSYSTEM_PROCESS_INFORMATION)SystemInformation;
+
+      PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
+      auto Entry = ProcessInformation;
+      for ( ;; ) {
+        const auto NextEntryOffset = Entry->NextEntryOffset;
+        if ( Entry->UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess ) {
+          DWORD dwProcessId = 0;
+          GetWindowThreadProcessId(GetShellWindow(), &dwProcessId);
+          Entry->InheritedFromUniqueProcessId = ULongToHandle(dwProcessId);
+          Entry->OtherOperationCount.QuadPart = 1;
+        } else if ( !IsVendorModule(Entry->ImageName)
+          || RtlEqualUnicodeString(&Entry->ImageName, &NtCurrentPeb()->ProcessParameters->ImagePathName, TRUE) ) {
+          if ( PreviousEntry )
+            PreviousEntry->NextEntryOffset = !NextEntryOffset ? 0 : PreviousEntry->NextEntryOffset + NextEntryOffset;
+          RtlSecureZeroMemory(Entry->ImageName.Buffer, Entry->ImageName.Length);
+
+          SIZE_T cnt = FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION, Threads);
+          if ( SystemInformationClass == SystemProcessInformation ) {
+            cnt += ProcessInformation->NumberOfThreads * sizeof(SYSTEM_THREAD_INFORMATION);
+          } else {
+            cnt += ProcessInformation->NumberOfThreads * sizeof(SYSTEM_EXTENDED_THREAD_INFORMATION);
+            if ( SystemInformationClass == SystemFullProcessInformation )
+              cnt += sizeof(SYSTEM_PROCESS_INFORMATION_EXTENSION);
+          }
+          RtlSecureZeroMemory(Entry, cnt);
+        } else {
+          PreviousEntry = Entry;
+        }
+        if ( !NextEntryOffset )
+          break;
+        Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Entry + NextEntryOffset);
+      }
+      break;
+    }
     case SystemModuleInformation:
       if ( SystemInformationLength < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) )
-        return STATUS_INFO_LENGTH_MISMATCH;
-      return STATUS_ACCESS_DENIED;
-
-    case SystemModuleInformationEx:
-      if ( SystemInformationLength < sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) )
         return STATUS_INFO_LENGTH_MISMATCH;
       return STATUS_ACCESS_DENIED;
 
@@ -229,6 +259,11 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
       if ( ReturnLength )
         *ReturnLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);
       return STATUS_SUCCESS;
+
+    case SystemModuleInformationEx:
+      if ( SystemInformationLength < sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) )
+        return STATUS_INFO_LENGTH_MISMATCH;
+      return STATUS_ACCESS_DENIED;
   }
   return g_pfnNtQuerySystemInformation(
     SystemInformationClass,
@@ -355,8 +390,8 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
 
 static inline void hide_from_peb(HMODULE hLibModule)
 {
-  const auto cs = static_cast<nt::rtl::critical_section *>(NtCurrentPeb()->LoaderLock);
-  std::lock_guard<nt::rtl::critical_section> guard(*cs);
+  nt::rtl::loader_lock loaderLock{};
+  std::lock_guard<nt::rtl::loader_lock> guard{loaderLock};
 
   const auto ldrData = NtCurrentPeb()->Ldr;
 
