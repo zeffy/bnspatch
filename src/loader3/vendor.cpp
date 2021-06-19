@@ -8,7 +8,8 @@ typedef struct tagLANGANDCODEPAGE
 
 bool IsVendorModule(const nt::rtl::unicode_string_view &Filename)
 {
-  const auto wstrFilename = Filename.wstring();
+  const std::filesystem::path wstrFilename{Filename.wstring()};
+  const auto parentPath = wstrFilename.parent_path();
 
   DWORD dwHandle;
   const auto dwLen = GetFileVersionInfoSizeExW(0, wstrFilename.c_str(), &dwHandle);
@@ -26,7 +27,6 @@ bool IsVendorModule(const nt::rtl::unicode_string_view &Filename)
     return false;
 
   constexpr std::array CompanyNames{
-    L"Microsoft",
     L"NCSOFT",
     L"Tencent",
     L"Innova",
@@ -35,15 +35,26 @@ bool IsVendorModule(const nt::rtl::unicode_string_view &Filename)
     L"Wellbia.com"
     L"TGuard"
   };
+
   for ( UINT i = 0; i < (cbVerInfo / sizeof(LANGANDCODEPAGE)); i++ ) {
-    const auto wszQueryString = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\ProductName",
+    auto wszQueryString = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\CompanyName",
       plc[i].wLanguage, plc[i].wCodePage);
 
-    LPCWSTR pwszCompanyName;
+    LPWSTR pwszCompanyName;
     UINT uLen;
-    if ( VerQueryValueW(FileVersionInformation.data(), wszQueryString.c_str(), (LPVOID *)&pwszCompanyName, &uLen)
-      && std::ranges::any_of(CompanyNames, std::bind(&StrStrNIW, std::placeholders::_1, pwszCompanyName, uLen)) )
-      return true;
+    if ( VerQueryValueW(FileVersionInformation.data(), wszQueryString.c_str(), &(LPVOID &)pwszCompanyName, &uLen) ) {
+      if ( StrStrNIW(pwszCompanyName, L"Microsoft", uLen) ) {
+        wszQueryString = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\ProductName", plc[i].wLanguage, plc[i].wCodePage);
+        LPWSTR pwszProductName;
+        if ( VerQueryValueW(FileVersionInformation.data(), wszQueryString.c_str(), &(LPVOID &)pwszProductName, &uLen) ) {
+          if ( StrStrNIW(pwszProductName, L"Microsoft\xAE Windows\xAE", uLen) )
+            return true;
+        }
+      } else {
+        if ( std::ranges::any_of(CompanyNames, std::bind(&StrStrNIW, pwszCompanyName, std::placeholders::_1, uLen)) )
+          return true;
+      }
+    }
   }
   return false;
 }

@@ -136,9 +136,9 @@ NTSTATUS NTAPI NtProtectVirtualMemory_hook(
 
   if ( (NewProtect & PAGE_WRITE_ANY) != 0
     && (ProcessHandle == NtCurrentProcess()
-      || (SUCCEEDED_NTSTATUS(NtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &ProcessInfo, sizeof(PROCESS_BASIC_INFORMATION), nullptr))
+      || (SUCCEEDED_NTSTATUS(g_pfnNtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &ProcessInfo, sizeof(PROCESS_BASIC_INFORMATION), nullptr))
         && ProcessInfo.UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess))
-    && SUCCEEDED_NTSTATUS(NtQuerySystemInformation(SystemBasicInformation, &SystemInfo, sizeof(SYSTEM_BASIC_INFORMATION), nullptr)) ) {
+    && SUCCEEDED_NTSTATUS(g_pfnNtQuerySystemInformation(SystemBasicInformation, &SystemInfo, sizeof(SYSTEM_BASIC_INFORMATION), nullptr)) ) {
 
     __try {
       StartingAddress = PAGE_ALIGN(*BaseAddress);
@@ -185,13 +185,71 @@ NTSTATUS NTAPI NtQueryInformationProcess_hook(
         return STATUS_PORT_NOT_SET;
     }
   }
-  return g_pfnNtQueryInformationProcess(
-    ProcessHandle,
-    ProcessInformationClass,
-    ProcessInformation,
-    ProcessInformationLength,
-    ReturnLength);
+  return g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, ProcessInformation, ProcessInformationLength, ReturnLength);
 }
+
+NTSTATUS NTAPI MyNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID *SystemInformation, PULONG ReturnLength)
+{
+  NTSTATUS Status;
+  ULONG MyReturnLength;
+
+  Status = g_pfnNtQuerySystemInformation(SystemInformationClass, nullptr, 0, &MyReturnLength);
+  if ( Status != STATUS_INFO_LENGTH_MISMATCH )
+    return Status;
+
+  PVOID Buffer = nullptr;
+  do {
+    if ( Buffer )
+      (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
+    Buffer = RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, MyReturnLength);
+    if ( !Buffer )
+      return STATUS_INSUFFICIENT_RESOURCES;
+    Status = g_pfnNtQuerySystemInformation(SystemInformationClass, Buffer, MyReturnLength, &MyReturnLength);
+  } while ( Status == STATUS_INFO_LENGTH_MISMATCH );
+  if ( FAILED_NTSTATUS(Status) ) {
+    (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
+    *SystemInformation = nullptr;
+    if ( ReturnLength )
+      *ReturnLength = 0;
+  } else {
+    *SystemInformation = Buffer;
+    if ( ReturnLength )
+      *ReturnLength = MyReturnLength;
+  }
+  return Status;
+}
+
+NTSTATUS NTAPI MyNtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID *ProcessInformation, PULONG ReturnLength)
+{
+  NTSTATUS Status;
+  ULONG MyReturnLength;
+
+  Status = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, nullptr, 0, &MyReturnLength);
+  if ( Status != STATUS_INFO_LENGTH_MISMATCH )
+    return Status;
+
+  PVOID Buffer = nullptr;
+  do {
+    if ( Buffer )
+      (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
+    Buffer = RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, MyReturnLength);
+    if ( !Buffer )
+      return STATUS_INSUFFICIENT_RESOURCES;
+    Status = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, Buffer, MyReturnLength, &MyReturnLength);
+  } while ( Status == STATUS_INFO_LENGTH_MISMATCH );
+  if ( FAILED_NTSTATUS(Status) ) {
+    (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
+    *ProcessInformation = nullptr;
+    if ( ReturnLength )
+      *ReturnLength = 0;
+  } else {
+    *ProcessInformation = Buffer;
+    if ( ReturnLength )
+      *ReturnLength = MyReturnLength;
+  }
+  return Status;
+}
+
 
 decltype(&NtQuerySystemInformation) g_pfnNtQuerySystemInformation;
 NTSTATUS NTAPI NtQuerySystemInformation_hook(
@@ -201,50 +259,60 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
   PULONG ReturnLength)
 {
   switch ( SystemInformationClass ) {
-    case SystemProcessInformation:
     case SystemSessionProcessInformation:
+    case SystemProcessInformation:
     case SystemExtendedProcessInformation:
     case SystemFullProcessInformation: {
-      const auto Status = g_pfnNtQuerySystemInformation(SystemInformationClass, SystemInformation, SystemInformationLength, ReturnLength);
-      if ( FAILED_NTSTATUS(Status) )
-        return Status;
-
-      const auto ProcessInformation = SystemInformationClass == SystemSessionProcessInformation
-        ? (PSYSTEM_PROCESS_INFORMATION)((PSYSTEM_SESSION_PROCESS_INFORMATION)SystemInformation)->Buffer
-        : (PSYSTEM_PROCESS_INFORMATION)SystemInformation;
-
-      PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
-      auto Entry = ProcessInformation;
-      for ( ;; ) {
-        const auto NextEntryOffset = Entry->NextEntryOffset;
-        if ( Entry->UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess ) {
-          DWORD dwProcessId = 0;
-          GetWindowThreadProcessId(GetShellWindow(), &dwProcessId);
-          Entry->InheritedFromUniqueProcessId = ULongToHandle(dwProcessId);
-          Entry->OtherOperationCount.QuadPart = 1;
-        } else if ( !IsVendorModule(Entry->ImageName)
-          || RtlEqualUnicodeString(&Entry->ImageName, &NtCurrentPeb()->ProcessParameters->ImagePathName, TRUE) ) {
-          if ( PreviousEntry )
-            PreviousEntry->NextEntryOffset = !NextEntryOffset ? 0 : PreviousEntry->NextEntryOffset + NextEntryOffset;
-          RtlSecureZeroMemory(Entry->ImageName.Buffer, Entry->ImageName.Length);
-
-          SIZE_T cnt = FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION, Threads);
-          if ( SystemInformationClass == SystemProcessInformation ) {
-            cnt += ProcessInformation->NumberOfThreads * sizeof(SYSTEM_THREAD_INFORMATION);
-          } else {
-            cnt += ProcessInformation->NumberOfThreads * sizeof(SYSTEM_EXTENDED_THREAD_INFORMATION);
-            if ( SystemInformationClass == SystemFullProcessInformation )
-              cnt += sizeof(SYSTEM_PROCESS_INFORMATION_EXTENSION);
-          }
-          RtlSecureZeroMemory(Entry, cnt);
+      ULONG MyReturnLength;
+      const auto Status = g_pfnNtQuerySystemInformation(SystemInformationClass, SystemInformation, SystemInformationLength, &MyReturnLength);
+      if ( SUCCEEDED_NTSTATUS(Status) ) {
+        PSYSTEM_PROCESS_INFORMATION Start;
+        ULONG SizeOfBuf;
+        if ( SystemInformationClass == SystemSessionProcessInformation ) {
+          Start = (PSYSTEM_PROCESS_INFORMATION)((PSYSTEM_SESSION_PROCESS_INFORMATION)SystemInformation)->Buffer;
+          SizeOfBuf = ((PSYSTEM_SESSION_PROCESS_INFORMATION)SystemInformation)->SizeOfBuf;
         } else {
-          PreviousEntry = Entry;
+          Start = (PSYSTEM_PROCESS_INFORMATION)SystemInformation;
+          SizeOfBuf = MyReturnLength;
         }
-        if ( !NextEntryOffset )
-          break;
-        Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Entry + NextEntryOffset);
+        if ( Start->NextEntryOffset ) {
+          PSYSTEM_PROCESS_INFORMATION Entry = Start;
+          PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
+          ULONG NextEntryOffset;
+          do {
+            PreviousEntry = Entry;
+            Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)PreviousEntry + PreviousEntry->NextEntryOffset);
+            NextEntryOffset = Entry->NextEntryOffset;
+            const auto EntrySize = NextEntryOffset ? NextEntryOffset : SizeOfBuf - (ULONG)((PUCHAR)Entry - (PUCHAR)Start);
+            CLIENT_ID ClientId{.UniqueProcess = Entry->UniqueProcessId};
+            OBJECT_ATTRIBUTES ObjectAttributes;
+            InitializeObjectAttributes(&ObjectAttributes, nullptr, 0, nullptr, nullptr);
+            HANDLE ProcessHandle;
+            if ( SUCCEEDED_NTSTATUS(NtOpenProcess(&ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION, &ObjectAttributes, &ClientId)) ) {
+              PUNICODE_STRING ImageNameW32 = nullptr;
+              const auto Status = MyNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, &(PVOID &)ImageNameW32, nullptr);
+              (VOID)NtClose(ProcessHandle);
+              if ( SUCCEEDED_NTSTATUS(Status)
+                && ImageNameW32->Length != 0
+                && (Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
+                  && (RtlEqualUnicodeString(&NtCurrentPeb()->ProcessParameters->ImagePathName, ImageNameW32, TRUE)
+                    || !IsVendorModule(*ImageNameW32))) ) {
+                RtlSecureZeroMemory(Entry, EntrySize);
+                PreviousEntry->NextEntryOffset += NextEntryOffset;
+                Entry = PreviousEntry;
+              }
+              (VOID)RtlFreeHeap(RtlProcessHeap(), 0, ImageNameW32);
+            }
+          } while ( NextEntryOffset );
+        }
       }
-      break;
+      __try {
+        if ( ReturnLength )
+          *ReturnLength = MyReturnLength;
+      } __except ( EXCEPTION_EXECUTE_HANDLER ) {
+        return GetExceptionCode();
+      }
+      return MyReturnLength > SystemInformationLength ? STATUS_INFO_LENGTH_MISMATCH : Status;
     }
     case SystemModuleInformation:
       if ( SystemInformationLength < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) )
@@ -548,3 +616,12 @@ VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
   });
   return g_pfnGetSystemTimeAsFileTime(lpSystemTimeAsFileTime);
 }
+
+decltype(&K32EnumProcesses) g_pfnK32EnumProcesses;
+BOOL
+WINAPI
+EnumProcesses(
+  _Out_writes_bytes_(cb) DWORD *lpidProcess,
+  _In_ DWORD cb,
+  _Out_ LPDWORD lpcbNeeded
+);
