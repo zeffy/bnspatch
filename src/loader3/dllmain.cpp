@@ -42,7 +42,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
             if ( VerQueryValueW(block.data(), L"\\", &buffer, &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
               const auto vsf = static_cast<VS_FIXEDFILEINFO *>(buffer);
-              GClientVersion = (static_cast<uint64_t>(vsf->dwProductVersionMS) << 32) | vsf->dwProductVersionLS;
+              GClientVersion.major = HIWORD(vsf->dwProductVersionMS);
+              GClientVersion.minor = LOWORD(vsf->dwProductVersionMS);
+              GClientVersion.build = HIWORD(vsf->dwProductVersionLS);
+              GClientVersion.revision = LOWORD(vsf->dwProductVersionLS);
             }
             wil::unique_handle tokenHandle;
             THROW_IF_WIN32_BOOL_FALSE(OpenProcessToken(NtCurrentProcess(), TOKEN_WRITE, &tokenHandle));
