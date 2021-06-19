@@ -2,4 +2,4 @@
 
 #include "pch.h"
 
-bool IsVendorModule(const nt::rtl::unicode_string_view &Filename);
+bool IsVendorModule(PUNICODE_STRING Filename);

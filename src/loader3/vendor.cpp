@@ -6,9 +6,9 @@ typedef struct tagLANGANDCODEPAGE
   WORD wCodePage;
 } LANGANDCODEPAGE, *PLANGANDCODEPAGE;
 
-bool IsVendorModule(const nt::rtl::unicode_string_view &Filename)
+bool IsVendorModule(PUNICODE_STRING Filename)
 {
-  const std::filesystem::path wstrFilename{Filename.wstring()};
+  const std::filesystem::path wstrFilename{static_cast<nt::rtl::unicode_string_view *>(Filename)->wstring()};
   const auto parentPath = wstrFilename.parent_path();
 
   DWORD dwHandle;

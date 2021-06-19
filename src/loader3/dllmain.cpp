@@ -61,15 +61,23 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtGetContextThread", &g_pfnNtGetContextThread, NtGetContextThread_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtOpenKeyEx", &g_pfnNtOpenKeyEx, NtOpenKeyEx_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtProtectVirtualMemory", &g_pfnNtProtectVirtualMemory, NtProtectVirtualMemory_hook));
-            THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtQueryInformationProcess", &g_pfnNtQueryInformationProcess, NtQueryInformationProcess_hook));
+            g_pfnNtQueryInformationProcess = reinterpret_cast<decltype(&NtQueryInformationProcess)>(GetProcAddress(hNtDll, "NtQueryInformationProcess"));
+#ifdef _WIN64
+            THROW_LAST_ERROR_IF_NULL(g_pfnNtQueryInformationProcess);
+            THROW_IF_WIN32_ERROR(DetourAttach(&(PVOID &)g_pfnNtQueryInformationProcess, NtQueryInformationProcess_hook));
+#endif
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtQuerySystemInformation", &g_pfnNtQuerySystemInformation, NtQuerySystemInformation_hook));
-            THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtSetInformationThread", &g_pfnNtSetInformationThread, NtSetInformationThread_hook));
+            g_pfnNtSetInformationThread = reinterpret_cast<decltype(&NtSetInformationThread)>(GetProcAddress(hNtDll, "NtSetInformationThread"));
+            THROW_LAST_ERROR_IF_NULL(g_pfnNtSetInformationThread);
+#ifdef _WIN64
+            THROW_IF_WIN32_ERROR(DetourAttach(&(PVOID &)g_pfnNtSetInformationThread, NtSetInformationThread_hook));
+#endif
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "RtlLeaveCriticalSection", &g_pfnRtlLeaveCriticalSection, RtlLeaveCriticalSection_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(L"kernel32.dll", "GetSystemTimeAsFileTime", &g_pfnGetSystemTimeAsFileTime, GetSystemTimeAsFileTime_hook));
-            const auto win32err = DetourAttach(L"user32.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook);
+            const auto win32err = DetourAttach(L"win32u.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook);
             if ( FAILED_WIN32(win32err) ) {
               if ( win32err == ERROR_PROC_NOT_FOUND )
-                THROW_IF_WIN32_ERROR(DetourAttach(L"win32u.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook));
+                THROW_IF_WIN32_ERROR(DetourAttach(L"user32.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook));
               else
                 THROW_WIN32(win32err);
             }
