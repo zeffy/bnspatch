@@ -188,37 +188,6 @@ NTSTATUS NTAPI NtQueryInformationProcess_hook(
   return g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, ProcessInformation, ProcessInformationLength, ReturnLength);
 }
 
-NTSTATUS NTAPI MyNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID *SystemInformation, PULONG ReturnLength)
-{
-  NTSTATUS Status;
-  ULONG MyReturnLength;
-
-  Status = g_pfnNtQuerySystemInformation(SystemInformationClass, nullptr, 0, &MyReturnLength);
-  if ( Status != STATUS_INFO_LENGTH_MISMATCH )
-    return Status;
-
-  PVOID Buffer = nullptr;
-  do {
-    if ( Buffer )
-      (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
-    Buffer = RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, MyReturnLength);
-    if ( !Buffer )
-      return STATUS_INSUFFICIENT_RESOURCES;
-    Status = g_pfnNtQuerySystemInformation(SystemInformationClass, Buffer, MyReturnLength, &MyReturnLength);
-  } while ( Status == STATUS_INFO_LENGTH_MISMATCH );
-  if ( FAILED_NTSTATUS(Status) ) {
-    (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
-    *SystemInformation = nullptr;
-    if ( ReturnLength )
-      *ReturnLength = 0;
-  } else {
-    *SystemInformation = Buffer;
-    if ( ReturnLength )
-      *ReturnLength = MyReturnLength;
-  }
-  return Status;
-}
-
 NTSTATUS NTAPI MyNtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID *ProcessInformation, PULONG ReturnLength)
 {
   NTSTATUS Status;
@@ -294,7 +263,6 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
               const auto Status = MyNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, (PVOID *)&ImageNameW32, nullptr);
               (VOID)NtClose(ProcessHandle);
               if ( SUCCEEDED_NTSTATUS(Status)
-                && ImageNameW32->Length != 0
                 && (Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
                   && (RtlEqualUnicodeString(&NtCurrentPeb()->ProcessParameters->ImagePathName, ImageNameW32, TRUE) || !IsVendorModule(ImageNameW32))) ) {
                 RtlSecureZeroMemory(Entry, EntrySize);
