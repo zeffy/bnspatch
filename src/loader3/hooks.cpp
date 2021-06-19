@@ -188,38 +188,6 @@ NTSTATUS NTAPI NtQueryInformationProcess_hook(
   return g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, ProcessInformation, ProcessInformationLength, ReturnLength);
 }
 
-NTSTATUS NTAPI MyNtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID *ProcessInformation, PULONG ReturnLength)
-{
-  NTSTATUS Status;
-  ULONG MyReturnLength;
-
-  Status = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, nullptr, 0, &MyReturnLength);
-  if ( Status != STATUS_INFO_LENGTH_MISMATCH )
-    return Status;
-
-  PVOID Buffer = nullptr;
-  do {
-    if ( Buffer )
-      (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
-    Buffer = RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, MyReturnLength);
-    if ( !Buffer )
-      return STATUS_INSUFFICIENT_RESOURCES;
-    Status = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, Buffer, MyReturnLength, &MyReturnLength);
-  } while ( Status == STATUS_INFO_LENGTH_MISMATCH );
-  if ( FAILED_NTSTATUS(Status) ) {
-    (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
-    *ProcessInformation = nullptr;
-    if ( ReturnLength )
-      *ReturnLength = 0;
-  } else {
-    *ProcessInformation = Buffer;
-    if ( ReturnLength )
-      *ReturnLength = MyReturnLength;
-  }
-  return Status;
-}
-
-
 decltype(&NtQuerySystemInformation) g_pfnNtQuerySystemInformation;
 NTSTATUS NTAPI NtQuerySystemInformation_hook(
   SYSTEM_INFORMATION_CLASS SystemInformationClass,
@@ -235,7 +203,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
     {
       ULONG MyReturnLength;
       const auto Status = g_pfnNtQuerySystemInformation(SystemInformationClass, SystemInformation, SystemInformationLength, &MyReturnLength);
-      if (SUCCEEDED_NTSTATUS(Status) ) {
+      if ( SUCCEEDED_NTSTATUS(Status) ) {
         PSYSTEM_PROCESS_INFORMATION Start;
         ULONG SizeOfBuf;
         if ( SystemInformationClass == SystemSessionProcessInformation ) {
@@ -249,6 +217,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
           PSYSTEM_PROCESS_INFORMATION Entry = Start;
           PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
           ULONG NextEntryOffset;
+          // we can safely skip the first entry because it will always be System Idle Process
           do {
             PreviousEntry = Entry;
             Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)PreviousEntry + PreviousEntry->NextEntryOffset);
@@ -259,18 +228,23 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
             InitializeObjectAttributes(&ObjectAttributes, nullptr, 0, nullptr, nullptr);
             HANDLE ProcessHandle;
             if ( SUCCEEDED_NTSTATUS(NtOpenProcess(&ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION, &ObjectAttributes, &ClientId)) ) {
-              PUNICODE_STRING ImageNameW32 = nullptr;
-              const auto Status = MyNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, (PVOID *)&ImageNameW32, nullptr);
-              (VOID)NtClose(ProcessHandle);
-              if ( SUCCEEDED_NTSTATUS(Status)
-                && (Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
-                  && (RtlEqualUnicodeString(&NtCurrentPeb()->ProcessParameters->ImagePathName, ImageNameW32, TRUE) || !IsVendorModule(ImageNameW32))) ) {
+              ULONG ImageFileNameLength;
+              auto MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, nullptr, 0, &ImageFileNameLength);
+              if ( MyStatus != STATUS_INFO_LENGTH_MISMATCH )
+                return MyStatus;
+              const auto ImageName = (PUNICODE_STRING)RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, ImageFileNameLength);
+              if ( !ImageName )
+                return STATUS_INSUFFICIENT_RESOURCES;
+              MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, ImageName, ImageFileNameLength, &ImageFileNameLength);
+              if ( Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
+                && (RtlEqualUnicodeString(&NtCurrentPeb()->ProcessParameters->ImagePathName, ImageName, TRUE) || !IsVendorModule(ImageName)) ) {
                 RtlSecureZeroMemory(Entry, EntrySize);
                 PreviousEntry->NextEntryOffset += NextEntryOffset;
                 Entry = PreviousEntry;
               }
-              (VOID)RtlFreeHeap(RtlProcessHeap(), 0, ImageNameW32);
+              (VOID)RtlFreeHeap(RtlProcessHeap(), 0, ImageName);
             }
+            (VOID)NtClose(ProcessHandle);
           } while ( NextEntryOffset );
         }
       }
