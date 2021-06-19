@@ -295,7 +295,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
       } __except ( EXCEPTION_EXECUTE_HANDLER ) {
         return GetExceptionCode();
       }
-      return MyReturnLength > SystemInformationLength ? STATUS_INFO_LENGTH_MISMATCH : Status;
+      return Status;
     }
     case SystemModuleInformation:
       if ( SystemInformationLength < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) )
