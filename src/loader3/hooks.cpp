@@ -11,12 +11,24 @@ NTSTATUS NTAPI LdrGetDllHandle_hook(
   PUNICODE_STRING DllName,
   PVOID *DllHandle)
 {
-  const auto Name = static_cast<nt::rtl::unicode_string_view *>(DllName);
+  const auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
+  nt::rtl::unicode_string_view Name = *FullName;
+  auto It = FullName->rbegin();
+  for ( ; It != FullName->rend(); ++It ) {
+    if ( *It == '\\' || *It == '/' ) {
+      const safe_ptrdiff_t length = std::distance(FullName->rbegin(), It) * sizeof(WCHAR);
+      --It;
+      Name.Buffer = const_cast<PWCH>(&*It);
+      Name.Length = length;
+      Name.MaximumLength = length;
+      break;
+    }
+  }
   if (
 #ifndef _WIN64
-    Name->iequals(L"kmon.dll") ||
+    Name.iequals(L"kmon.dll") ||
 #endif
-    Name->iequals(L"dateinj01.dll")
+    Name.iequals(L"dateinj01.dll")
     ) {
     DllHandle = nullptr;
     return STATUS_DLL_NOT_FOUND;
@@ -32,8 +44,18 @@ NTSTATUS NTAPI LdrLoadDll_hook(
   PVOID *DllHandle)
 {
   const auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
-  auto Name = *FullName;
-
+  nt::rtl::unicode_string_view Name = *FullName;
+  auto It = FullName->rbegin();
+  for ( ; It != FullName->rend(); ++It ) {
+    if ( *It == '\\' || *It == '/' ) {
+      const safe_ptrdiff_t length = std::distance(FullName->rbegin(), It) * sizeof(WCHAR);
+      --It;
+      Name.Buffer = const_cast<PWCH>(&*It);
+      Name.Length = length;
+      Name.MaximumLength = length;
+      break;
+    }
+  }
   if ( Name.istarts_with(L"aegisty") || Name.iequals(L"NCCrashReporter.dll") ) {
     *DllHandle = nullptr;
     return STATUS_DLL_NOT_FOUND;
@@ -217,7 +239,20 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
           PSYSTEM_PROCESS_INFORMATION Entry = Start;
           PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
           ULONG NextEntryOffset;
-          // we can safely skip the first entry because it will always be System Idle Process
+
+          const nt::rtl::unicode_string_view &FullName = NtCurrentPeb()->ProcessParameters->ImagePathName;
+          nt::rtl::unicode_string_view Name = FullName;
+          auto It = FullName.rbegin();
+          for ( ; It != FullName.rend(); ++It ) {
+            if ( *It == '\\' || *It == '/' ) {
+              const safe_ptrdiff_t length = std::distance(FullName.rbegin(), It) * sizeof(WCHAR);
+              --It;
+              Name.Buffer = const_cast<PWCH>(&*It);
+              Name.Length = length;
+              Name.MaximumLength = length;
+              break;
+            }
+          }
           do {
             PreviousEntry = Entry;
             Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)PreviousEntry + PreviousEntry->NextEntryOffset);
@@ -228,23 +263,29 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
             InitializeObjectAttributes(&ObjectAttributes, nullptr, 0, nullptr, nullptr);
             HANDLE ProcessHandle;
             if ( SUCCEEDED_NTSTATUS(NtOpenProcess(&ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION, &ObjectAttributes, &ClientId)) ) {
-              ULONG ImageFileNameLength;
-              auto MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, nullptr, 0, &ImageFileNameLength);
+              auto MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, nullptr, 0, &MyReturnLength);
               if ( MyStatus != STATUS_INFO_LENGTH_MISMATCH )
                 return MyStatus;
-              const auto ImageName = (PUNICODE_STRING)RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, ImageFileNameLength);
-              if ( !ImageName )
-                return STATUS_INSUFFICIENT_RESOURCES;
-              MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, ImageName, ImageFileNameLength, &ImageFileNameLength);
-              if ( Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
-                && (RtlEqualUnicodeString(&NtCurrentPeb()->ProcessParameters->ImagePathName, ImageName, TRUE) || !IsVendorModule(ImageName)) ) {
-                RtlSecureZeroMemory(Entry, EntrySize);
-                PreviousEntry->NextEntryOffset += NextEntryOffset;
-                Entry = PreviousEntry;
+              PUNICODE_STRING Buffer = nullptr;
+              do {
+                if ( Buffer )
+                  (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
+                Buffer = (PUNICODE_STRING)RtlAllocateHeap(RtlProcessHeap(), HEAP_ZERO_MEMORY, MyReturnLength);
+                if ( !Buffer )
+                  return STATUS_INSUFFICIENT_RESOURCES;
+                MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, Buffer, MyReturnLength, &MyReturnLength);
+              } while ( MyStatus == STATUS_INFO_LENGTH_MISMATCH );
+              if ( SUCCEEDED_NTSTATUS(MyStatus) ) {
+                if ( Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
+                  && (RtlEqualUnicodeString(&Name, &Entry->ImageName, TRUE)  || !IsVendorModule(Buffer)) ) { // vendor match
+                  RtlSecureZeroMemory(Entry, EntrySize);
+                  PreviousEntry->NextEntryOffset += NextEntryOffset;
+                  Entry = PreviousEntry;
+                }
+                (VOID)RtlFreeHeap(RtlProcessHeap(), 0, Buffer);
               }
-              (VOID)RtlFreeHeap(RtlProcessHeap(), 0, ImageName);
+              (VOID)NtClose(ProcessHandle);
             }
-            (VOID)NtClose(ProcessHandle);
           } while ( NextEntryOffset );
         }
       }
@@ -271,8 +312,12 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
         return STATUS_INFO_LENGTH_MISMATCH;
       ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerEnabled = FALSE;
       ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerNotPresent = TRUE;
-      if ( ReturnLength )
-        *ReturnLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);
+      __try {
+        if ( ReturnLength )
+          *ReturnLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);;
+      } __except ( EXCEPTION_EXECUTE_HANDLER ) {
+        return GetExceptionCode();
+      }
       return STATUS_SUCCESS;
   }
   return g_pfnNtQuerySystemInformation(
