@@ -495,7 +495,7 @@ BOOL STDAPICALLTYPE SHTestTokenMembership_hook(_In_opt_ HANDLE hToken, ULONG ulR
   static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
 
   wil::init_once_nothrow(InitOnce, [&]() {
-    if ( !(hToken && ulRID == DOMAIN_ALIAS_RID_ADMINS) )
+    if ( hToken != nullptr || ulRID != DOMAIN_ALIAS_RID_ADMINS )
       return E_FAIL;
     std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
     path.remove_filename();
