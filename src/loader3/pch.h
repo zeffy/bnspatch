@@ -15,6 +15,9 @@
 #include <phnt.h>
 #pragma comment( lib, "ntdll.lib" )
 #pragma comment( lib, "version.lib" )
+#include <shellapi.h>
+#pragma comment( lib, "shell32.lib" )
+#include <accctrl.h>
 #include <bcrypt.h>
 #pragma comment( lib, "bcrypt.lib" )
 #include <Winsock2.h>
@@ -24,6 +27,12 @@
 #pragma comment( lib, "Shlwapi.lib" )
 #include <WS2tcpip.h>
 #pragma comment( lib, "Ws2_32.lib" )
+
+typedef struct tagLANGANDCODEPAGE
+{
+  WORD wLanguage;
+  WORD wCodePage;
+} LANGANDCODEPAGE, *PLANGANDCODEPAGE;
 
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include <codecvt>

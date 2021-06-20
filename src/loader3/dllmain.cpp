@@ -8,6 +8,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 {
   switch ( ul_reason_for_call ) {
     case DLL_PROCESS_ATTACH: {
+      if ( hModule != wil::GetModuleInstanceHandle() )
+        (VOID)SHCreateProcessAsUserW(nullptr); // stupid hack to ensure shell32.dll is loaded
+
       THROW_IF_WIN32_BOOL_FALSE(DisableThreadLibraryCalls(hModule));
 
       const auto resInfo = FindResourceW(nullptr, MAKEINTRESOURCEW(VS_VERSION_INFO), VS_FILE_INFO);
@@ -22,15 +25,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       const std::span res{reinterpret_cast<PUCHAR>(ptr), count};
       const std::vector<UCHAR> block{res.begin(), res.end()};
 
-      struct LANGANDCODEPAGE
-      {
-        WORD wLanguage;
-        WORD wCodePage;
-      };
       LPVOID buffer;
       UINT len;
       if ( VerQueryValueW(block.data(), L"\\VarFileInfo\\Translation", &buffer, &len) ) {
-        for ( const auto &t : std::span{static_cast<LANGANDCODEPAGE *>(buffer), len / sizeof(LANGANDCODEPAGE)} ) {
+        for ( const auto &t : std::span{(PLANGANDCODEPAGE)buffer, len / sizeof(LANGANDCODEPAGE)} ) {
           const auto subBlock = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\OriginalFilename", t.wLanguage, t.wCodePage);
 
           if ( !VerQueryValueW(block.data(), subBlock.c_str(), &buffer, &len) )
@@ -51,11 +49,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             THROW_IF_WIN32_BOOL_FALSE(OpenProcessToken(NtCurrentProcess(), TOKEN_WRITE, &tokenHandle));
             ULONG virtualizationEnabled = TRUE;
             THROW_IF_WIN32_BOOL_FALSE(SetTokenInformation(tokenHandle.get(), TokenVirtualizationEnabled, &virtualizationEnabled, sizeof(ULONG)));
-
+            
             THROW_IF_WIN32_ERROR(DetourTransactionBegin());
             THROW_IF_WIN32_ERROR(DetourUpdateThread(NtCurrentThread()));
             const auto hNtDll = GetModuleHandleW(RtlNtdllName);
             THROW_LAST_ERROR_IF_NULL(hNtDll);
+            
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "LdrGetDllHandle", &g_pfnLdrGetDllHandle, LdrGetDllHandle_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "LdrLoadDll", &g_pfnLdrLoadDll, LdrLoadDll_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtCreateFile", &g_pfnNtCreateFile, NtCreateFile_hook));
@@ -65,8 +64,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtOpenKeyEx", &g_pfnNtOpenKeyEx, NtOpenKeyEx_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtProtectVirtualMemory", &g_pfnNtProtectVirtualMemory, NtProtectVirtualMemory_hook));
             g_pfnNtQueryInformationProcess = reinterpret_cast<decltype(&NtQueryInformationProcess)>(GetProcAddress(hNtDll, "NtQueryInformationProcess"));
-#ifdef _WIN64
             THROW_LAST_ERROR_IF_NULL(g_pfnNtQueryInformationProcess);
+#ifdef _WIN64
             THROW_IF_WIN32_ERROR(DetourAttach(&(PVOID &)g_pfnNtQueryInformationProcess, NtQueryInformationProcess_hook));
 #endif
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtQuerySystemInformation", &g_pfnNtQuerySystemInformation, NtQuerySystemInformation_hook));
@@ -75,8 +74,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 #ifdef _WIN64
             THROW_IF_WIN32_ERROR(DetourAttach(&(PVOID &)g_pfnNtSetInformationThread, NtSetInformationThread_hook));
 #endif
-            THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "RtlLeaveCriticalSection", &g_pfnRtlLeaveCriticalSection, RtlLeaveCriticalSection_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(L"kernel32.dll", "GetSystemTimeAsFileTime", &g_pfnGetSystemTimeAsFileTime, GetSystemTimeAsFileTime_hook));
+            THROW_IF_WIN32_ERROR(DetourAttach(L"shell32.dll", "SHTestTokenMembership", &g_pfnSHTestTokenMembership, SHTestTokenMembership_hook));
             const auto win32err = DetourAttach(L"win32u.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook);
             if ( FAILED_WIN32(win32err) ) {
               if ( win32err == ERROR_PROC_NOT_FOUND )

@@ -94,9 +94,6 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
   SIZE_T MaximumStackSize,
   PPS_ATTRIBUTE_LIST AttributeList);
 
-extern decltype(&RtlLeaveCriticalSection) g_pfnRtlLeaveCriticalSection;
-NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSection);
-
 extern HWND(NTAPI *g_pfnNtUserFindWindowEx)(HWND, HWND, PUNICODE_STRING, PUNICODE_STRING, DWORD);
 HWND NTAPI NtUserFindWindowEx_hook(
   HWND hwndParent,
@@ -104,6 +101,9 @@ HWND NTAPI NtUserFindWindowEx_hook(
   PUNICODE_STRING pstrClassName,
   PUNICODE_STRING pstrWindowName,
   DWORD dwType);
+
+extern decltype(&SHTestTokenMembership) g_pfnSHTestTokenMembership;
+BOOL STDAPICALLTYPE SHTestTokenMembership_hook(_In_opt_ HANDLE hToken, ULONG ulRID);
 
 extern decltype(&GetSystemTimeAsFileTime) g_pfnGetSystemTimeAsFileTime;
 VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime);

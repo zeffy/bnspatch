@@ -1,11 +1,5 @@
 #include "pch.h"
 
-typedef struct tagLANGANDCODEPAGE
-{
-  WORD wLanguage;
-  WORD wCodePage;
-} LANGANDCODEPAGE, *PLANGANDCODEPAGE;
-
 bool IsVendorModule(PUNICODE_STRING Filename)
 {
   const std::filesystem::path wstrFilename{static_cast<nt::rtl::unicode_string_view *>(Filename)->wstring()};

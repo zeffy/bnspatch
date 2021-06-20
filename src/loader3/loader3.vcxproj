@@ -162,11 +162,11 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="hooks.cpp" />
-    <ClCompile Include="vendor.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="globals.cpp" />
+    <ClCompile Include="vendor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="detours.hpp" />

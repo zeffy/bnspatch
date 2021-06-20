@@ -4,19 +4,13 @@
 #include "pluginsdk.h"
 #include "vendor.h"
 
-decltype(&LdrGetDllHandle) g_pfnLdrGetDllHandle;
-NTSTATUS NTAPI LdrGetDllHandle_hook(
-  PWSTR DllPath,
-  PULONG DllCharacteristics,
-  PUNICODE_STRING DllName,
-  PVOID *DllHandle)
+static nt::rtl::unicode_string_view Util_GetFileName(const nt::rtl::unicode_string_view &FullName)
 {
-  const auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
-  nt::rtl::unicode_string_view Name = *FullName;
-  auto It = FullName->rbegin();
-  for ( ; It != FullName->rend(); ++It ) {
+  nt::rtl::unicode_string_view Name = FullName;
+  auto It = FullName.rbegin();
+  for ( ; It != FullName.rend(); ++It ) {
     if ( *It == '\\' || *It == '/' ) {
-      const safe_ptrdiff_t length = std::distance(FullName->rbegin(), It) * sizeof(WCHAR);
+      const safe_ptrdiff_t length = std::distance(FullName.rbegin(), It) * sizeof(WCHAR);
       --It;
       Name.Buffer = const_cast<PWCH>(&*It);
       Name.Length = length;
@@ -24,6 +18,17 @@ NTSTATUS NTAPI LdrGetDllHandle_hook(
       break;
     }
   }
+  return Name;
+}
+
+decltype(&LdrGetDllHandle) g_pfnLdrGetDllHandle;
+NTSTATUS NTAPI LdrGetDllHandle_hook(
+  _In_opt_ PWSTR DllPath,
+  _In_opt_ PULONG DllCharacteristics,
+  _In_ PUNICODE_STRING DllName,
+  _Out_ PVOID *DllHandle)
+{
+  const auto Name = Util_GetFileName(*DllName);
   if (
 #ifndef _WIN64
     Name.iequals(L"kmon.dll") ||
@@ -38,24 +43,12 @@ NTSTATUS NTAPI LdrGetDllHandle_hook(
 
 decltype(&LdrLoadDll) g_pfnLdrLoadDll;
 NTSTATUS NTAPI LdrLoadDll_hook(
-  PWSTR DllPath,
-  PULONG DllCharacteristics,
-  PUNICODE_STRING DllName,
-  PVOID *DllHandle)
+  _In_opt_ PWSTR DllPath,
+  _In_opt_ PULONG DllCharacteristics,
+  _In_ PUNICODE_STRING DllName,
+  _Out_ PVOID *DllHandle)
 {
-  const auto FullName = static_cast<nt::rtl::unicode_string_view *>(DllName);
-  nt::rtl::unicode_string_view Name = *FullName;
-  auto It = FullName->rbegin();
-  for ( ; It != FullName->rend(); ++It ) {
-    if ( *It == '\\' || *It == '/' ) {
-      const safe_ptrdiff_t length = std::distance(FullName->rbegin(), It) * sizeof(WCHAR);
-      --It;
-      Name.Buffer = const_cast<PWCH>(&*It);
-      Name.Length = length;
-      Name.MaximumLength = length;
-      break;
-    }
-  }
+  const auto Name = Util_GetFileName(*DllName);
   if ( Name.istarts_with(L"aegisty") || Name.iequals(L"NCCrashReporter.dll") ) {
     *DllHandle = nullptr;
     return STATUS_DLL_NOT_FOUND;
@@ -65,17 +58,17 @@ NTSTATUS NTAPI LdrLoadDll_hook(
 
 decltype(&NtCreateFile) g_pfnNtCreateFile;
 NTSTATUS NTAPI NtCreateFile_hook(
-  PHANDLE FileHandle,
-  ACCESS_MASK DesiredAccess,
-  POBJECT_ATTRIBUTES ObjectAttributes,
-  PIO_STATUS_BLOCK IoStatusBlock,
-  PLARGE_INTEGER AllocationSize,
-  ULONG FileAttributes,
-  ULONG ShareAccess,
-  ULONG CreateDisposition,
-  ULONG CreateOptions,
-  PVOID EaBuffer,
-  ULONG EaLength)
+  _Out_ PHANDLE FileHandle,
+  _In_ ACCESS_MASK DesiredAccess,
+  _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+  _Out_ PIO_STATUS_BLOCK IoStatusBlock,
+  _In_opt_ PLARGE_INTEGER AllocationSize,
+  _In_ ULONG FileAttributes,
+  _In_ ULONG ShareAccess,
+  _In_ ULONG CreateDisposition,
+  _In_ ULONG CreateOptions,
+  _In_reads_bytes_opt_(EaLength) PVOID EaBuffer,
+  _In_ ULONG EaLength)
 {
 #ifndef _WIN64
   constexpr std::array ObjectNames{
@@ -107,10 +100,10 @@ NTSTATUS NTAPI NtCreateFile_hook(
 
 decltype(&NtCreateMutant) g_pfnNtCreateMutant;
 NTSTATUS NTAPI NtCreateMutant_hook(
-  PHANDLE MutantHandle,
-  ACCESS_MASK DesiredAccess,
-  POBJECT_ATTRIBUTES ObjectAttributes,
-  BOOLEAN InitialOwner)
+  _Out_ PHANDLE MutantHandle,
+  _In_ ACCESS_MASK DesiredAccess,
+  _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+  _In_ BOOLEAN InitialOwner)
 {
   if ( ObjectAttributes ) {
     const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
@@ -125,10 +118,10 @@ NTSTATUS NTAPI NtCreateMutant_hook(
 
 decltype(&NtOpenKeyEx) g_pfnNtOpenKeyEx;
 NTSTATUS NTAPI NtOpenKeyEx_hook(
-  PHANDLE KeyHandle,
-  ACCESS_MASK DesiredAccess,
-  POBJECT_ATTRIBUTES ObjectAttributes,
-  ULONG OpenOptions)
+  _Out_ PHANDLE KeyHandle,
+  _In_ ACCESS_MASK DesiredAccess,
+  _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+  _In_ ULONG OpenOptions)
 {
   constexpr std::array ObjectNames{
     L"Software\\Wine",
@@ -146,11 +139,11 @@ NTSTATUS NTAPI NtOpenKeyEx_hook(
 
 decltype(&NtProtectVirtualMemory) g_pfnNtProtectVirtualMemory;
 NTSTATUS NTAPI NtProtectVirtualMemory_hook(
-  HANDLE ProcessHandle,
-  PVOID *BaseAddress,
-  PSIZE_T RegionSize,
-  ULONG NewProtect,
-  PULONG OldProtect)
+  _In_ HANDLE ProcessHandle,
+  _Inout_ PVOID *BaseAddress,
+  _Inout_ PSIZE_T RegionSize,
+  _In_ ULONG NewProtect,
+  _Out_ PULONG OldProtect)
 {
   PROCESS_BASIC_INFORMATION ProcessInfo;
   SYSTEM_BASIC_INFORMATION SystemInfo;
@@ -177,11 +170,11 @@ NTSTATUS NTAPI NtProtectVirtualMemory_hook(
 
 decltype(&NtQueryInformationProcess) g_pfnNtQueryInformationProcess;
 NTSTATUS NTAPI NtQueryInformationProcess_hook(
-  HANDLE ProcessHandle,
-  PROCESSINFOCLASS ProcessInformationClass,
-  PVOID ProcessInformation,
-  ULONG ProcessInformationLength,
-  PULONG ReturnLength)
+  _In_ HANDLE ProcessHandle,
+  _In_ PROCESSINFOCLASS ProcessInformationClass,
+  _Out_writes_bytes_(ProcessInformationLength) PVOID ProcessInformation,
+  _In_ ULONG ProcessInformationLength,
+  _Out_opt_ PULONG ReturnLength)
 {
   PROCESS_BASIC_INFORMATION ProcessInfo;
 
@@ -239,20 +232,8 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
           PSYSTEM_PROCESS_INFORMATION Entry = Start;
           PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
           ULONG NextEntryOffset;
-
-          const nt::rtl::unicode_string_view &FullName = NtCurrentPeb()->ProcessParameters->ImagePathName;
-          nt::rtl::unicode_string_view Name = FullName;
-          auto It = FullName.rbegin();
-          for ( ; It != FullName.rend(); ++It ) {
-            if ( *It == '\\' || *It == '/' ) {
-              const safe_ptrdiff_t length = std::distance(FullName.rbegin(), It) * sizeof(WCHAR);
-              --It;
-              Name.Buffer = const_cast<PWCH>(&*It);
-              Name.Length = length;
-              Name.MaximumLength = length;
-              break;
-            }
-          }
+          
+          auto Name = Util_GetFileName(NtCurrentPeb()->ProcessParameters->ImagePathName);
           do {
             PreviousEntry = Entry;
             Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)PreviousEntry + PreviousEntry->NextEntryOffset);
@@ -264,8 +245,8 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
             HANDLE ProcessHandle;
             if ( SUCCEEDED_NTSTATUS(NtOpenProcess(&ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION, &ObjectAttributes, &ClientId)) ) {
               auto MyStatus = g_pfnNtQueryInformationProcess(ProcessHandle, ProcessImageFileNameWin32, nullptr, 0, &MyReturnLength);
-              if ( MyStatus != STATUS_INFO_LENGTH_MISMATCH )
-                return MyStatus;
+              if ( FAILED_NTSTATUS(MyStatus) && MyStatus != STATUS_INFO_LENGTH_MISMATCH )
+                continue;
               PUNICODE_STRING Buffer = nullptr;
               do {
                 if ( Buffer )
@@ -277,7 +258,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
               } while ( MyStatus == STATUS_INFO_LENGTH_MISMATCH );
               if ( SUCCEEDED_NTSTATUS(MyStatus) ) {
                 if ( Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
-                  && (RtlEqualUnicodeString(&Name, &Entry->ImageName, TRUE)  || !IsVendorModule(Buffer)) ) { // vendor match
+                  && (Name.iequals(Entry->ImageName) || !IsVendorModule(Buffer)) ) {
                   RtlSecureZeroMemory(Entry, EntrySize);
                   PreviousEntry->NextEntryOffset += NextEntryOffset;
                   Entry = PreviousEntry;
@@ -329,10 +310,10 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
 
 decltype(&NtSetInformationThread) g_pfnNtSetInformationThread;
 NTSTATUS NTAPI NtSetInformationThread_hook(
-  HANDLE ThreadHandle,
-  THREADINFOCLASS ThreadInformationClass,
-  PVOID ThreadInformation,
-  ULONG ThreadInformationLength)
+  _In_ HANDLE ThreadHandle,
+  _In_ THREADINFOCLASS ThreadInformationClass,
+  _In_reads_bytes_(ThreadInformationLength) PVOID ThreadInformation,
+  _In_ ULONG ThreadInformationLength)
 {
   THREAD_BASIC_INFORMATION ThreadInfo;
 
@@ -350,8 +331,8 @@ NTSTATUS NTAPI NtSetInformationThread_hook(
 
 decltype(&NtGetContextThread) g_pfnNtGetContextThread;
 NTSTATUS NTAPI NtGetContextThread_hook(
-  HANDLE ThreadHandle,
-  PCONTEXT ThreadContext)
+  _In_ HANDLE ThreadHandle,
+  _Inout_ PCONTEXT ThreadContext)
 {
   THREAD_BASIC_INFORMATION ThreadInfo;
   DWORD ContextFlags = 0;
@@ -392,17 +373,17 @@ NTSTATUS NTAPI NtGetContextThread_hook(
 
 decltype(&NtCreateThreadEx) g_pfnNtCreateThreadEx;
 NTSTATUS NTAPI NtCreateThreadEx_hook(
-  PHANDLE ThreadHandle,
-  ACCESS_MASK DesiredAccess,
-  POBJECT_ATTRIBUTES ObjectAttributes,
-  HANDLE ProcessHandle,
-  PVOID StartRoutine, // PUSER_THREAD_START_ROUTINE
-  PVOID Argument,
-  ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
-  SIZE_T ZeroBits,
-  SIZE_T StackSize,
-  SIZE_T MaximumStackSize,
-  PPS_ATTRIBUTE_LIST AttributeList)
+  _Out_ PHANDLE ThreadHandle,
+  _In_ ACCESS_MASK DesiredAccess,
+  _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+  _In_ HANDLE ProcessHandle,
+  _In_ PVOID StartRoutine, // PUSER_THREAD_START_ROUTINE
+  _In_opt_ PVOID Argument,
+  _In_ ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
+  _In_ SIZE_T ZeroBits,
+  _In_ SIZE_T StackSize,
+  _In_ SIZE_T MaximumStackSize,
+  _In_opt_ PPS_ATTRIBUTE_LIST AttributeList)
 {
   PROCESS_BASIC_INFORMATION ProcessInfo;
 
@@ -428,6 +409,7 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
         }
       }
     }
+    CreateFlags &= ~THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER;
   }
   return g_pfnNtCreateThreadEx(
     ThreadHandle,
@@ -436,7 +418,7 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
     ProcessHandle,
     StartRoutine,
     Argument,
-    CreateFlags & ~THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER,
+    CreateFlags,
     ZeroBits,
     StackSize,
     MaximumStackSize,
@@ -473,21 +455,48 @@ static inline void hide_from_peb(HMODULE hLibModule)
   }
 }
 
-decltype(&RtlLeaveCriticalSection) g_pfnRtlLeaveCriticalSection;
-NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSection)
+HWND(NTAPI *g_pfnNtUserFindWindowEx)(HWND, HWND, PUNICODE_STRING, PUNICODE_STRING, DWORD);
+HWND NTAPI NtUserFindWindowEx_hook(
+  HWND hwndParent,
+  HWND hwndChild,
+  PUNICODE_STRING pstrClassName,
+  PUNICODE_STRING pstrWindowName,
+  DWORD dwType)
 {
-  // We have to be careful inside this hook, as it could deadlock very easily.
+  constexpr std::array ClassNames{
+#ifndef _WIN64
+    L"OLLYDBG",
+    L"GBDYLLO",
+    L"pediy06",
+#endif         
+    L"FilemonClass",
+    L"PROCMON_WINDOW_CLASS",
+    L"RegmonClass",
+    L"18467-41"
+  };
+  constexpr std::array WindowNames{
+    L"File Monitor - Sysinternals: www.sysinternals.com",
+    L"Process Monitor - Sysinternals: www.sysinternals.com",
+    L"Registry Monitor - Sysinternals: www.sysinternals.com"
+  };
+  const auto ClassName = static_cast<nt::rtl::unicode_string_view *>(pstrClassName);
+  const auto WindowName = static_cast<nt::rtl::unicode_string_view *>(pstrWindowName);
+  if ( (ClassName && std::ranges::any_of(ClassNames, [ClassName](const auto &Other) { return ClassName->iequals(Other); }))
+    || (WindowName && std::ranges::any_of(WindowNames, [WindowName](const auto &Other) { return WindowName->equals(Other); })) ) {
+    return nullptr;
+  }
+  return g_pfnNtUserFindWindowEx(hwndParent, hwndChild, pstrClassName, pstrWindowName, dwType);
+}
 
-  static std::atomic_flag flag = ATOMIC_FLAG_INIT;
+// Underlying API of IsUserAnAdmin, which is called by WL right after winmm.dll loads
+decltype(&SHTestTokenMembership) g_pfnSHTestTokenMembership;
+BOOL STDAPICALLTYPE SHTestTokenMembership_hook(_In_opt_ HANDLE hToken, ULONG ulRID)
+{
+  static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
 
-  const auto status = g_pfnRtlLeaveCriticalSection(CriticalSection);
-  if ( FAILED_NTSTATUS(status) )
-    return status;
-
-  if ( CriticalSection == NtCurrentPeb()->LoaderLock
-    && !RtlIsCriticalSectionLocked(CriticalSection)
-    && !flag.test_and_set() ) {
-
+  wil::init_once_nothrow(InitOnce, [&]() {
+    if ( !(hToken && ulRID == DOMAIN_ALIAS_RID_ADMINS) )
+      return E_FAIL;
     std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
     path.remove_filename();
 
@@ -523,11 +532,7 @@ NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSectio
       return lhs.info->priority > rhs.info->priority;
     });
     std::erase_if(GPlugins, [](const auto &item) {
-      // here I'm specifically not calling the init function for bnspatch
-      // so that using an older build that still has anti-anti-debug hooks
-      // won't break everything. xml patching is unaffected.
-      const auto stem = item.path.stem();
-      return _wcsicmp(stem.c_str(), L"bnspatch") != 0 && item.info->init && !item.info->init(GClientVersion);
+      return item.info->init && !item.info->init(GClientVersion);
     });
     for ( const auto &item : GPlugins ) {
       if ( item.info->hide_from_peb )
@@ -541,52 +546,20 @@ NTSTATUS NTAPI RtlLeaveCriticalSection_hook(PRTL_CRITICAL_SECTION CriticalSectio
       const auto text = std::format(L"[loader3] Loaded plugin: \"{}\" ({:#x})", item.path.c_str(), reinterpret_cast<uintptr_t>(item.hmodule.get()));
       OutputDebugStringW(text.c_str());
     }
-  }
-  return status;
-}
-
-HWND(NTAPI *g_pfnNtUserFindWindowEx)(HWND, HWND, PUNICODE_STRING, PUNICODE_STRING, DWORD);
-HWND NTAPI NtUserFindWindowEx_hook(
-  HWND hwndParent,
-  HWND hwndChild,
-  PUNICODE_STRING pstrClassName,
-  PUNICODE_STRING pstrWindowName,
-  DWORD dwType)
-{
-  constexpr std::array ClassNames{
-#ifndef _WIN64
-    L"OLLYDBG",
-    L"GBDYLLO",
-    L"pediy06",
-#endif         
-    L"FilemonClass",
-    L"PROCMON_WINDOW_CLASS",
-    L"RegmonClass",
-    L"18467-41"
-  };
-  constexpr std::array WindowNames{
-    L"File Monitor - Sysinternals: www.sysinternals.com",
-    L"Process Monitor - Sysinternals: www.sysinternals.com",
-    L"Registry Monitor - Sysinternals: www.sysinternals.com"
-  };
-  const auto ClassName = static_cast<nt::rtl::unicode_string_view *>(pstrClassName);
-  const auto WindowName = static_cast<nt::rtl::unicode_string_view *>(pstrWindowName);
-  if ( (ClassName && std::ranges::any_of(ClassNames, [ClassName](const auto &Other) { return ClassName->iequals(Other); }))
-    || (WindowName && std::ranges::any_of(WindowNames, [WindowName](const auto &Other) { return WindowName->equals(Other); })) ) {
-    return nullptr;
-  }
-  return g_pfnNtUserFindWindowEx(hwndParent, hwndChild, pstrClassName, pstrWindowName, dwType);
+    return S_OK;
+  });
+  return g_pfnSHTestTokenMembership(hToken, ulRID);
 }
 
 decltype(&GetSystemTimeAsFileTime) g_pfnGetSystemTimeAsFileTime;
 VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
 {
-  static INIT_ONCE once;
+  static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
 
   std::array<PVOID, 64> Buffer;
   const auto Count = RtlWalkFrameChain(Buffer.data(), SafeInt{Buffer.size()}, 0);
   const std::span<PVOID> Callers{Buffer.data(), Count};
-  wil::init_once_nothrow(once, [&Callers]() {
+  wil::init_once_nothrow(InitOnce, [&Callers]() {
     MEMORY_BASIC_INFORMATION mbi;
     const auto it = std::ranges::find_if(Callers, [&](PVOID Caller) {
       return VirtualQuery(Caller, &mbi, sizeof(MEMORY_BASIC_INFORMATION)) != 0
@@ -603,12 +576,3 @@ VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
   });
   return g_pfnGetSystemTimeAsFileTime(lpSystemTimeAsFileTime);
 }
-
-decltype(&K32EnumProcesses) g_pfnK32EnumProcesses;
-BOOL
-WINAPI
-EnumProcesses(
-  _Out_writes_bytes_(cb) DWORD *lpidProcess,
-  _In_ DWORD cb,
-  _Out_ LPDWORD lpcbNeeded
-);
