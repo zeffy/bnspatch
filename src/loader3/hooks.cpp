@@ -232,7 +232,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
           PSYSTEM_PROCESS_INFORMATION Entry = Start;
           PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
           ULONG NextEntryOffset;
-          
+
           auto Name = Util_GetFileName(NtCurrentPeb()->ProcessParameters->ImagePathName);
           do {
             PreviousEntry = Entry;
@@ -455,37 +455,32 @@ static inline void hide_from_peb(HMODULE hLibModule)
   }
 }
 
-HWND(NTAPI *g_pfnNtUserFindWindowEx)(HWND, HWND, PUNICODE_STRING, PUNICODE_STRING, DWORD);
-HWND NTAPI NtUserFindWindowEx_hook(
-  HWND hwndParent,
-  HWND hwndChild,
-  PUNICODE_STRING pstrClassName,
-  PUNICODE_STRING pstrWindowName,
-  DWORD dwType)
+decltype(&FindWindowA) g_pfnFindWindowA;
+HWND WINAPI FindWindowA_hook(
+  _In_opt_ LPCSTR lpClassName,
+  _In_opt_ LPCSTR lpWindowName)
 {
   constexpr std::array ClassNames{
 #ifndef _WIN64
-    L"OLLYDBG",
-    L"GBDYLLO",
-    L"pediy06",
+    "OLLYDBG",
+    "GBDYLLO",
+    "pediy06",
 #endif         
-    L"FilemonClass",
-    L"PROCMON_WINDOW_CLASS",
-    L"RegmonClass",
-    L"18467-41"
+    "FilemonClass",
+    "PROCMON_WINDOW_CLASS",
+    "RegmonClass",
+    "18467-41"
   };
   constexpr std::array WindowNames{
-    L"File Monitor - Sysinternals: www.sysinternals.com",
-    L"Process Monitor - Sysinternals: www.sysinternals.com",
-    L"Registry Monitor - Sysinternals: www.sysinternals.com"
+    "File Monitor - Sysinternals: www.sysinternals.com",
+    "Process Monitor - Sysinternals: www.sysinternals.com",
+    "Registry Monitor - Sysinternals: www.sysinternals.com"
   };
-  const auto ClassName = static_cast<nt::rtl::unicode_string_view *>(pstrClassName);
-  const auto WindowName = static_cast<nt::rtl::unicode_string_view *>(pstrWindowName);
-  if ( (ClassName && std::ranges::any_of(ClassNames, [ClassName](const auto &Other) { return ClassName->iequals(Other); }))
-    || (WindowName && std::ranges::any_of(WindowNames, [WindowName](const auto &Other) { return WindowName->equals(Other); })) ) {
+  if ( (lpClassName && std::ranges::any_of(ClassNames, [lpClassName](LPCSTR String) { return lstrcmpiA(lpClassName, String) == 0; }))
+    || (lpWindowName && std::ranges::any_of(WindowNames, [lpWindowName](LPCSTR String) { return lstrcmpA(lpWindowName, String) == 0; })) ) {
     return nullptr;
   }
-  return g_pfnNtUserFindWindowEx(hwndParent, hwndChild, pstrClassName, pstrWindowName, dwType);
+  return g_pfnFindWindowA(lpClassName, lpWindowName);
 }
 
 // Underlying API of IsUserAnAdmin, which is called by WL right after winmm.dll loads

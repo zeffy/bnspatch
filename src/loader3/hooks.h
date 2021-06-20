@@ -94,13 +94,10 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
   SIZE_T MaximumStackSize,
   PPS_ATTRIBUTE_LIST AttributeList);
 
-extern HWND(NTAPI *g_pfnNtUserFindWindowEx)(HWND, HWND, PUNICODE_STRING, PUNICODE_STRING, DWORD);
-HWND NTAPI NtUserFindWindowEx_hook(
-  HWND hwndParent,
-  HWND hwndChild,
-  PUNICODE_STRING pstrClassName,
-  PUNICODE_STRING pstrWindowName,
-  DWORD dwType);
+extern decltype(&FindWindowA) g_pfnFindWindowA;
+HWND WINAPI FindWindowA_hook(
+  _In_opt_ LPCSTR lpClassName,
+  _In_opt_ LPCSTR lpWindowName);
 
 extern decltype(&SHTestTokenMembership) g_pfnSHTestTokenMembership;
 BOOL STDAPICALLTYPE SHTestTokenMembership_hook(_In_opt_ HANDLE hToken, ULONG ulRID);

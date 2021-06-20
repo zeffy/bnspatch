@@ -11,8 +11,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
       if ( hModule != wil::GetModuleInstanceHandle() )
         (VOID)SHCreateProcessAsUserW(nullptr); // stupid hack to ensure shell32.dll is loaded
 
-      THROW_IF_WIN32_BOOL_FALSE(DisableThreadLibraryCalls(hModule));
-
       const auto resInfo = FindResourceW(nullptr, MAKEINTRESOURCEW(VS_VERSION_INFO), VS_FILE_INFO);
       if ( !resInfo ) return TRUE;
 
@@ -49,12 +47,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             THROW_IF_WIN32_BOOL_FALSE(OpenProcessToken(NtCurrentProcess(), TOKEN_WRITE, &tokenHandle));
             ULONG virtualizationEnabled = TRUE;
             THROW_IF_WIN32_BOOL_FALSE(SetTokenInformation(tokenHandle.get(), TokenVirtualizationEnabled, &virtualizationEnabled, sizeof(ULONG)));
-            
+
             THROW_IF_WIN32_ERROR(DetourTransactionBegin());
             THROW_IF_WIN32_ERROR(DetourUpdateThread(NtCurrentThread()));
             const auto hNtDll = GetModuleHandleW(RtlNtdllName);
             THROW_LAST_ERROR_IF_NULL(hNtDll);
-            
+
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "LdrGetDllHandle", &g_pfnLdrGetDllHandle, LdrGetDllHandle_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "LdrLoadDll", &g_pfnLdrLoadDll, LdrLoadDll_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(hNtDll, "NtCreateFile", &g_pfnNtCreateFile, NtCreateFile_hook));
@@ -76,13 +74,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 #endif
             THROW_IF_WIN32_ERROR(DetourAttach(L"kernel32.dll", "GetSystemTimeAsFileTime", &g_pfnGetSystemTimeAsFileTime, GetSystemTimeAsFileTime_hook));
             THROW_IF_WIN32_ERROR(DetourAttach(L"shell32.dll", "SHTestTokenMembership", &g_pfnSHTestTokenMembership, SHTestTokenMembership_hook));
-            const auto win32err = DetourAttach(L"win32u.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook);
-            if ( FAILED_WIN32(win32err) ) {
-              if ( win32err == ERROR_PROC_NOT_FOUND )
-                THROW_IF_WIN32_ERROR(DetourAttach(L"user32.dll", "NtUserFindWindowEx", &g_pfnNtUserFindWindowEx, NtUserFindWindowEx_hook));
-              else
-                THROW_WIN32(win32err);
-            }
+            THROW_IF_WIN32_ERROR(DetourAttach(L"user32.dll", "FindWindowA", &g_pfnFindWindowA, FindWindowA_hook));
             THROW_IF_WIN32_ERROR(DetourTransactionCommit());
           }
           break;
