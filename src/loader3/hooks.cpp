@@ -3,6 +3,7 @@
 #include "hooks.h"
 #include "pluginsdk.h"
 #include "vendor.h"
+#include "tls_recursion_guard.h"
 
 static nt::rtl::unicode_string_view Util_GetFileName(const nt::rtl::unicode_string_view &FullName)
 {
@@ -488,61 +489,65 @@ decltype(&SHTestTokenMembership) g_pfnSHTestTokenMembership;
 BOOL STDAPICALLTYPE SHTestTokenMembership_hook(_In_opt_ HANDLE hToken, ULONG ulRID)
 {
   static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
+  static tls_recursion_guard lock;
+  std::unique_lock guard{lock, std::try_to_lock};
 
-  wil::init_once_nothrow(InitOnce, [&]() {
-    if ( hToken != nullptr || ulRID != DOMAIN_ALIAS_RID_ADMINS )
-      return E_FAIL;
-    std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
-    path.remove_filename();
+  if ( guard.owns_lock() ) {
+    wil::init_once_nothrow(InitOnce, [&]() {
+      if ( hToken != nullptr || ulRID != DOMAIN_ALIAS_RID_ADMINS )
+        return E_FAIL;
+      std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
+      path.remove_filename();
 
-    const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR");
-    if ( str ) {
-      THROW_IF_WIN32_BOOL_FALSE(SetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR", nullptr));
-      std::filesystem::path tmp{wil::str_raw_ptr(str)};
-      if ( tmp.is_relative() )
-        path /= tmp;
-      else
-        path = std::move(tmp);
-    } else {
-      path /= L"plugins"s;
-    }
-
-    std::error_code ec;
-    for ( const auto &entry : std::filesystem::directory_iterator{path, ec} ) {
-      if ( !entry.is_regular_file() )
-        continue;
-
-      const auto ext = entry.path().extension();
-      if ( _wcsicmp(ext.c_str(), L".dll") != 0 )
-        continue;
-
-      wil::unique_hmodule hlib{LoadLibraryExW(entry.path().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
-      if ( hlib ) {
-        const auto plugin_info = reinterpret_cast<const plugin_info_t *>(GetProcAddress(hlib.get(), "GPluginInfo"));
-        if ( plugin_info && plugin_info->sdk_version == PLUGIN_SDK_VERSION )
-          GPlugins.emplace_back(std::move(hlib), plugin_info, entry.path());
+      const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR");
+      if ( str ) {
+        THROW_IF_WIN32_BOOL_FALSE(SetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR", nullptr));
+        std::filesystem::path tmp{wil::str_raw_ptr(str)};
+        if ( tmp.is_relative() )
+          path /= tmp;
+        else
+          path = std::move(tmp);
+      } else {
+        path /= L"plugins"s;
       }
-    }
-    GPlugins.sort([](const auto &lhs, const auto &rhs) {
-      return lhs.info->priority > rhs.info->priority;
-    });
-    std::erase_if(GPlugins, [](const auto &item) {
-      return item.info->init && !item.info->init(GClientVersion);
-    });
-    for ( const auto &item : GPlugins ) {
-      if ( item.info->hide_from_peb )
-        hide_from_peb(item.hmodule.get());
 
-      if ( item.info->erase_pe_header ) {
-        const auto nt_headers = nt::rtl::image_nt_headers(item.hmodule.get());
-        const nt::rtl::protect_memory protect{item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READWRITE};
-        SecureZeroMemory(item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders);
+      std::error_code ec;
+      for ( const auto &entry : std::filesystem::directory_iterator{path, ec} ) {
+        if ( !entry.is_regular_file() )
+          continue;
+
+        const auto ext = entry.path().extension();
+        if ( _wcsicmp(ext.c_str(), L".dll") != 0 )
+          continue;
+
+        wil::unique_hmodule hlib{LoadLibraryExW(entry.path().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
+        if ( hlib ) {
+          const auto plugin_info = reinterpret_cast<const plugin_info_t *>(GetProcAddress(hlib.get(), "GPluginInfo"));
+          if ( plugin_info && plugin_info->sdk_version == PLUGIN_SDK_VERSION )
+            GPlugins.emplace_back(std::move(hlib), plugin_info, entry.path());
+        }
       }
-      const auto text = std::format(L"[loader3] Loaded plugin: \"{}\" ({:#x})", item.path.c_str(), reinterpret_cast<uintptr_t>(item.hmodule.get()));
-      OutputDebugStringW(text.c_str());
-    }
-    return S_OK;
-  });
+      GPlugins.sort([](const auto &lhs, const auto &rhs) {
+        return lhs.info->priority > rhs.info->priority;
+      });
+      std::erase_if(GPlugins, [](const auto &item) {
+        return item.info->init && !item.info->init(GClientVersion);
+      });
+      for ( const auto &item : GPlugins ) {
+        if ( item.info->hide_from_peb )
+          hide_from_peb(item.hmodule.get());
+
+        if ( item.info->erase_pe_header ) {
+          const auto nt_headers = nt::rtl::image_nt_headers(item.hmodule.get());
+          const nt::rtl::protect_memory protect{item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READWRITE};
+          SecureZeroMemory(item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders);
+        }
+        const auto text = std::format(L"[loader3] Loaded plugin: \"{}\" ({:#x})", item.path.c_str(), reinterpret_cast<uintptr_t>(item.hmodule.get()));
+        OutputDebugStringW(text.c_str());
+      }
+      return S_OK;
+    });
+  }
   return g_pfnSHTestTokenMembership(hToken, ulRID);
 }
 
@@ -550,24 +555,29 @@ decltype(&GetSystemTimeAsFileTime) g_pfnGetSystemTimeAsFileTime;
 VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
 {
   static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
+  static tls_recursion_guard lock;
+  std::unique_lock guard{lock, std::try_to_lock};
 
-  std::array<PVOID, 64> Buffer;
-  const auto Count = RtlWalkFrameChain(Buffer.data(), SafeInt{Buffer.size()}, 0);
-  const std::span<PVOID> Callers{Buffer.data(), Count};
-  wil::init_once_nothrow(InitOnce, [&Callers]() {
-    MEMORY_BASIC_INFORMATION mbi;
-    const auto it = std::ranges::find_if(Callers, [&](PVOID Caller) {
-      return VirtualQuery(Caller, &mbi, sizeof(MEMORY_BASIC_INFORMATION)) != 0
-        && (mbi.State == MEM_COMMIT && (mbi.Protect & 0xff) != PAGE_NOACCESS && (mbi.Protect & PAGE_GUARD) == 0)
-        && mbi.AllocationBase != wil::GetModuleInstanceHandle();
+  if ( guard.owns_lock() ) {
+    std::array<PVOID, 64> Buffer;
+    const auto Count = RtlWalkFrameChain(Buffer.data(), SafeInt{Buffer.size()}, 0);
+    const std::span<PVOID> Callers{Buffer.data(), Count};
+    wil::init_once_nothrow(InitOnce, [&Callers]() {
+      MEMORY_BASIC_INFORMATION mbi;
+
+      const auto it = std::ranges::find_if(Callers, [&](PVOID Caller) {
+        return VirtualQuery(Caller, &mbi, sizeof(MEMORY_BASIC_INFORMATION)) != 0
+          && (mbi.State == MEM_COMMIT && (mbi.Protect & 0xff) != PAGE_NOACCESS && (mbi.Protect & PAGE_GUARD) == 0)
+          && mbi.AllocationBase != wil::GetModuleInstanceHandle();
+      });
+      if ( it == Callers.end() || mbi.AllocationBase != NtCurrentPeb()->ImageBaseAddress )
+        return E_FAIL;
+      for ( const auto &item : GPlugins ) {
+        if ( item.info->oep_notify )
+          item.info->oep_notify(GClientVersion);
+      }
+      return S_OK;
     });
-    if ( it == Callers.end() || mbi.AllocationBase != NtCurrentPeb()->ImageBaseAddress )
-      return E_FAIL;
-    for ( const auto &item : GPlugins ) {
-      if ( item.info->oep_notify )
-        item.info->oep_notify(GClientVersion);
-    }
-    return S_OK;
-  });
+  }
   return g_pfnGetSystemTimeAsFileTime(lpSystemTimeAsFileTime);
 }

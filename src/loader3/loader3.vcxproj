@@ -173,6 +173,7 @@
     <ClInclude Include="globals.h" />
     <ClInclude Include="hooks.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="tls_recursion_guard.h" />
     <ClInclude Include="vendor.h" />
   </ItemGroup>
 </Project>

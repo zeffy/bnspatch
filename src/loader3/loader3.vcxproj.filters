@@ -54,5 +54,8 @@
     <ClInclude Include="vendor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="tls_recursion_guard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
