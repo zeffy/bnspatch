@@ -538,7 +538,7 @@ HRESULT Init()
     if ( hlib ) {
       const auto info = reinterpret_cast<const PluginInfo *>(GetProcAddress(hlib.get(), "GPluginInfo")); // allow both
       if ( info && info->sdk_version >= 3 ) {
-        std::wstring targetApps{info->sdk_version >= Version{3, 1} ? info->target_apps : L"Client.exe"};
+        std::wstring targetApps{info->sdk_version >= Version{3, 1} && info->target_apps ? info->target_apps : L"Client.exe"};
         wchar_t *context;
         auto token = wcstok_s(targetApps.data(), L";", &context);
         while ( token ) {
