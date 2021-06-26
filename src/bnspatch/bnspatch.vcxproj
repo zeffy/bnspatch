@@ -171,7 +171,6 @@
     <ClCompile Include="xmlpatch.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="detours.hpp" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="xmlcommon.h" />
     <ClInclude Include="xmlhooks.h" />

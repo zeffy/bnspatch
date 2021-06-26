@@ -3,12 +3,13 @@
 #include "pch.h"
 #include "pluginsdk.h"
 
-struct plugin_item_struct
+struct Plugin
 {
   wil::unique_hmodule hmodule;
-  const plugin_info_t *info;
+  const PluginInfo *info;
   std::filesystem::path path;
 };
 
-extern version_t GClientVersion;
-extern std::list<plugin_item_struct> GPlugins;
+extern Version GVersion;
+extern std::list<Plugin> GPlugins;
+

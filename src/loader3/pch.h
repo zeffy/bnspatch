@@ -88,6 +88,7 @@ using safe_double = SafeInt<double>;
 #include <ranges>
 #include <set>
 #include <span>
+#include <stack>
 #include <string_view>
 #include <string>
 #include <tuple>

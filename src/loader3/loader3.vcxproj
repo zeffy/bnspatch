@@ -79,7 +79,7 @@
       <SubSystem>Windows</SubSystem>
       <AdditionalDependencies>winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>$(TargetName)_$(PlatformShortName).def</ModuleDefinitionFile>
-      <DelayLoadDLLs>WINMM.dll</DelayLoadDLLs>
+      <DelayLoadDLLs>VERSION.dll;WINMM.dll</DelayLoadDLLs>
       <AdditionalOptions>/MERGE:.detourd=.data /MERGE:.detourc=.rdata /MERGE:_RDATA=.rdata %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
@@ -167,13 +167,15 @@
     </ClCompile>
     <ClCompile Include="globals.cpp" />
     <ClCompile Include="vendor.cpp" />
+    <ClCompile Include="wl.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="detours.hpp" />
+    <ClInclude Include="..\..\include\pluginsdk.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="hooks.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="tls_recursion_guard.h" />
+    <ClInclude Include="thread_local_mutex.h" />
     <ClInclude Include="vendor.h" />
+    <ClInclude Include="wl.h" />
   </ItemGroup>
 </Project>

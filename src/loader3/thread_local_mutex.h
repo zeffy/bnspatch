@@ -3,21 +3,24 @@
 #include "pch.h"
 
 template<SIZE_T Depth = 1>
-class tls_recursion_guard
+class thread_local_mutex
 {
 public:
-  tls_recursion_guard() : TlsIndex{TlsAlloc()} {
+  thread_local_mutex()
+  {
+    TlsIndex = TlsAlloc();
+    THROW_LAST_ERROR_IF(TlsIndex == TLS_OUT_OF_INDEXES);
     THROW_IF_WIN32_BOOL_FALSE(TlsSetValue(TlsIndex, nullptr));
   }
 
-  ~tls_recursion_guard()
+  ~thread_local_mutex()
   {
     THROW_IF_WIN32_BOOL_FALSE(TlsFree(TlsIndex));
   }
 
   bool try_lock()
   {
-    const auto TlsValue = (SIZE_T)TlsGetValue(TlsIndex);
+    const auto TlsValue = (ULONG_PTR)TlsGetValue(TlsIndex);
     if ( !TlsValue )
       THROW_IF_WIN32_ERROR(GetLastError());
     if ( TlsValue < Depth ) {
@@ -29,7 +32,7 @@ public:
 
   void unlock()
   {
-    const auto TlsValue = (SIZE_T)TlsGetValue(TlsIndex);
+    const auto TlsValue = (ULONG_PTR)TlsGetValue(TlsIndex);
     if ( !TlsValue )
       THROW_IF_WIN32_ERROR(GetLastError());
     THROW_IF_WIN32_BOOL_FALSE(TlsSetValue(TlsIndex, (LPVOID)(TlsValue - 1)));

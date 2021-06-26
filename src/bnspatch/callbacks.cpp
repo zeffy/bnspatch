@@ -4,16 +4,16 @@
 #include "pluginsdk.h"
 #include "xmlhooks.h"
 
-void __cdecl oep_notify([[maybe_unused]] const version_t client_version)
+void __cdecl oep_notify([[maybe_unused]] const Version client_version)
 {
-  const auto nt_headers = nt::rtl::image_nt_headers(nullptr);
-  const auto sections = nt::rtl::image_sections(nullptr);
+  const auto nt_headers = rtl::image_nt_headers(nullptr);
+  const auto sections = rtl::image_sections(nullptr);
   for ( const auto &section_header : sections ) {
     if ( (section_header.Characteristics & IMAGE_SCN_MEM_READ) != IMAGE_SCN_MEM_READ
       || section_header.VirtualAddress + section_header.Misc.VirtualSize > nt_headers->OptionalHeader.SizeOfImage )
       continue;
 
-    const auto section = nt::rtl::image_rva_to_va<UCHAR>(nullptr, section_header.VirtualAddress);
+    const auto section = rtl::image_rva_to_va<UCHAR>(nullptr, section_header.VirtualAddress);
     const char name[] = ".?AVXmlReaderImpl@@";
     for ( auto ptr = section;
       ptr + sizeof(TypeDescriptor) <= section + section_header.Misc.VirtualSize;
@@ -32,7 +32,7 @@ void __cdecl oep_notify([[maybe_unused]] const version_t client_version)
           || section_header2.VirtualAddress + section_header2.Misc.VirtualSize > nt_headers->OptionalHeader.SizeOfImage )
           continue;
 
-        const auto section2 = nt::rtl::image_rva_to_va<UCHAR>(nullptr, section_header2.VirtualAddress);
+        const auto section2 = rtl::image_rva_to_va<UCHAR>(nullptr, section_header2.VirtualAddress);
         for ( auto ptr2 = section2;
           ptr2 + sizeof(_RTTICompleteObjectLocator) <= section2 + section_header2.Misc.VirtualSize;
           ptr2 = (PUCHAR)(((ULONG_PTR)ptr2 + (alignof(_RTTICompleteObjectLocator) + 1)) & ~(alignof(_RTTICompleteObjectLocator) - 1)) ) {
@@ -62,11 +62,12 @@ void __cdecl oep_notify([[maybe_unused]] const version_t client_version)
   }
 }
 
-extern "C" __declspec(dllexport) plugin_info_t GPluginInfo = {
+extern "C" __declspec(dllexport) PluginInfo GPluginInfo = {
 #ifdef NDEBUG
   .hide_from_peb = true,
   .erase_pe_header = true,
 #endif
   .oep_notify = oep_notify,
-  .priority = 1
+  .priority = 1,
+  .target_apps = L"Client.exe;BNSR.exe"
 };

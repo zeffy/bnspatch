@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-struct version_t
+struct Version
 {
   union
   {
@@ -16,28 +16,28 @@ struct version_t
     uint64_t version;
   };
 
-  constexpr version_t()
+  constexpr Version()
     : version{0}
   {
   }
 
-  constexpr version_t(uint64_t version)
+  constexpr Version(uint64_t version)
     : version{version}
   {
   }
 
-  constexpr version_t(uint16_t major, uint16_t minor, uint16_t build = 0, uint16_t revision = 0)
+  constexpr Version(uint16_t major, uint16_t minor, uint16_t build = 0, uint16_t revision = 0)
     : major{major}, minor{minor}, build{build}, revision{revision}
   {
   }
 
-  constexpr version_t &operator=(uint64_t rhs)
+  constexpr Version &operator=(uint64_t rhs)
   {
     version = rhs;
     return *this;
   }
 
-  constexpr int compare(const version_t &other) const noexcept
+  constexpr int compare(const Version &other) const noexcept
   {
     if ( major != other.major )
       return major > other.major ? 1 : -1;
@@ -54,30 +54,31 @@ struct version_t
     return 0;
   }
 
-  constexpr bool operator==(const version_t &other) const noexcept
+  constexpr bool operator==(const Version &other) const noexcept
   {
     return version == other.version;
   }
 
-  constexpr bool operator!=(const version_t &other) const noexcept
+  constexpr bool operator!=(const Version &other) const noexcept
   {
     return !(version == other);
   }
 
-  constexpr auto operator<=>(const version_t &other) const noexcept
+  constexpr auto operator<=>(const Version &other) const noexcept
   {
     return compare(other);
   }
 };
 
-#define PLUGIN_SDK_VERSION 3
+constexpr Version PLUGIN_SDK_VERSION{3,1,0,0};
 
-struct plugin_info_t
+struct PluginInfo
 {
-  version_t sdk_version = PLUGIN_SDK_VERSION;
+  Version sdk_version{PLUGIN_SDK_VERSION};
   bool hide_from_peb;
   bool erase_pe_header;
-  bool(__cdecl *init)(const version_t);
-  void(__cdecl *oep_notify)(const version_t);
+  bool(__cdecl *init)(const Version version);
+  void(__cdecl *oep_notify)(const Version version);
   int priority;
+  const wchar_t *target_apps; // prior to 3.1 this is assumed to be L"Client.exe\0BNSR.exe\0"
 };

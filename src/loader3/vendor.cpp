@@ -2,7 +2,7 @@
 
 bool IsVendorModule(PUNICODE_STRING Filename)
 {
-  const std::filesystem::path wstrFilename{static_cast<nt::rtl::unicode_string_view *>(Filename)->wstring()};
+  const std::filesystem::path wstrFilename{rtl::to_wstring(*Filename)};
   const auto parentPath = wstrFilename.parent_path();
 
   DWORD dwHandle;
@@ -26,8 +26,8 @@ bool IsVendorModule(PUNICODE_STRING Filename)
     L"Innova",
     L"Garena",
     L"INCA Internet",
-    L"Wellbia.com"
     L"TGuard"
+    L"Wellbia.com"
   };
 
   for ( UINT i = 0; i < (cbVerInfo / sizeof(LANGANDCODEPAGE)); i++ ) {
@@ -45,7 +45,7 @@ bool IsVendorModule(PUNICODE_STRING Filename)
             return true;
         }
       } else {
-        if ( std::ranges::any_of(CompanyNames, std::bind(&StrStrNIW, pwszCompanyName, std::placeholders::_1, uLen)) )
+        if ( std::ranges::any_of(CompanyNames, std::bind(StrStrNIW, pwszCompanyName, std::placeholders::_1, uLen)) )
           return true;
       }
     }

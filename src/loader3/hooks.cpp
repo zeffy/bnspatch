@@ -3,15 +3,17 @@
 #include "hooks.h"
 #include "pluginsdk.h"
 #include "vendor.h"
-#include "tls_recursion_guard.h"
+#include "thread_local_mutex.h"
+#include "FastWildCompare.hpp"
+#include "wl.h"
 
-static nt::rtl::unicode_string_view Util_GetFileName(const nt::rtl::unicode_string_view &FullName)
+static UNICODE_STRING Util_GetFileName(const UNICODE_STRING &FullName)
 {
-  nt::rtl::unicode_string_view Name = FullName;
-  auto It = FullName.rbegin();
-  for ( ; It != FullName.rend(); ++It ) {
+  auto Name = FullName;
+  auto It = rtl::rbegin(FullName);
+  for ( ; It != rtl::rend(FullName); ++It ) {
     if ( *It == '\\' || *It == '/' ) {
-      const safe_ptrdiff_t length = std::distance(FullName.rbegin(), It) * sizeof(WCHAR);
+      const safe_ptrdiff_t length = std::distance(rtl::rbegin(FullName), It) * sizeof(WCHAR);
       --It;
       Name.Buffer = const_cast<PWCH>(&*It);
       Name.Length = length;
@@ -32,9 +34,9 @@ NTSTATUS NTAPI LdrGetDllHandle_hook(
   const auto Name = Util_GetFileName(*DllName);
   if (
 #ifndef _WIN64
-    Name.iequals(L"kmon.dll") ||
+    rtl::iequals(Name, L"kmon.dll") ||
 #endif
-    Name.iequals(L"dateinj01.dll")
+    rtl::iequals(Name, L"dateinj01.dll")
     ) {
     DllHandle = nullptr;
     return STATUS_DLL_NOT_FOUND;
@@ -50,7 +52,9 @@ NTSTATUS NTAPI LdrLoadDll_hook(
   _Out_ PVOID *DllHandle)
 {
   const auto Name = Util_GetFileName(*DllName);
-  if ( Name.istarts_with(L"aegisty") || Name.iequals(L"NCCrashReporter.dll") ) {
+  if ( rtl::istarts_with(Name, L"aegisty")
+    || rtl::iequals(Name, L"NCCrashReporter.dll")
+    /*|| rtl::iequals(Name, L"BugTrace.dll")*/ ) {
     *DllHandle = nullptr;
     return STATUS_DLL_NOT_FOUND;
   }
@@ -71,18 +75,15 @@ NTSTATUS NTAPI NtCreateFile_hook(
   _In_reads_bytes_opt_(EaLength) PVOID EaBuffer,
   _In_ ULONG EaLength)
 {
-#ifndef _WIN64
-  constexpr std::array ObjectNames{
-    L"\\\\.\\SICE",
-    L"\\\\.\\SIWVID",
-    L"\\\\.\\NTICE",
-  };
-
-  const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
-  if ( std::ranges::any_of(ObjectNames, [ObjectName](const auto &Other) {
-    return ObjectName->iequals(Other);
-  }) ) {
-    return STATUS_OBJECT_NAME_NOT_FOUND;
+#if !defined(_WIN64)
+  if ( WLIsProtected() ) {
+    constexpr std::array ObjectNames{
+      L"\\\\.\\SICE",
+      L"\\\\.\\SIWVID",
+      L"\\\\.\\NTICE",
+    };
+    if ( std::ranges::any_of(ObjectNames, [oa = ObjectAttributes](const auto p) { return rtl::iequals(*oa->ObjectName, p); }) )
+      return STATUS_OBJECT_NAME_NOT_FOUND;
   }
 #endif
   return g_pfnNtCreateFile(
@@ -106,13 +107,13 @@ NTSTATUS NTAPI NtCreateMutant_hook(
   _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
   _In_ BOOLEAN InitialOwner)
 {
-  if ( ObjectAttributes ) {
-    const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
-    if ( ObjectName->istarts_with(L"BnSGameClient") ) {
-      ObjectAttributes->ObjectName = nullptr;
-      ObjectAttributes->Attributes &= ~OBJ_OPENIF;
-      ObjectAttributes->RootDirectory = nullptr;
-    }
+  if ( ObjectAttributes
+    && ObjectAttributes->ObjectName
+    && rtl::istarts_with(*ObjectAttributes->ObjectName, L"BnSGameClient") ) {
+
+    ObjectAttributes->ObjectName = nullptr;
+    ObjectAttributes->Attributes &= ~OBJ_OPENIF;
+    ObjectAttributes->RootDirectory = nullptr;
   }
   return g_pfnNtCreateMutant(MutantHandle, DesiredAccess, ObjectAttributes, InitialOwner);
 }
@@ -128,13 +129,8 @@ NTSTATUS NTAPI NtOpenKeyEx_hook(
     L"Software\\Wine",
     L"HARDWARE\\ACPI\\DSDT\\VBOX__"
   };
-
-  const auto ObjectName = static_cast<nt::rtl::unicode_string_view *>(ObjectAttributes->ObjectName);
-  if ( std::ranges::any_of(ObjectNames, [ObjectName](const auto &Other) {
-    return ObjectName->iequals(Other);
-  }) ) {
+  if ( std::ranges::any_of(ObjectNames, [oa = ObjectAttributes](const auto p) { return rtl::iequals(*oa->ObjectName, p); }) )
     return STATUS_OBJECT_NAME_NOT_FOUND;
-  }
   return g_pfnNtOpenKeyEx(KeyHandle, DesiredAccess, ObjectAttributes, OpenOptions);
 }
 
@@ -234,7 +230,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
           PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
           ULONG NextEntryOffset;
 
-          auto Name = Util_GetFileName(NtCurrentPeb()->ProcessParameters->ImagePathName);
+          const auto Name = Util_GetFileName(NtCurrentPeb()->ProcessParameters->ImagePathName);
           do {
             PreviousEntry = Entry;
             Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)PreviousEntry + PreviousEntry->NextEntryOffset);
@@ -259,7 +255,7 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
               } while ( MyStatus == STATUS_INFO_LENGTH_MISMATCH );
               if ( SUCCEEDED_NTSTATUS(MyStatus) ) {
                 if ( Entry->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess
-                  && (Name.iequals(Entry->ImageName) || !IsVendorModule(Buffer)) ) {
+                  && (rtl::iequals(Name, Entry->ImageName) || !IsVendorModule(Buffer)) ) {
                   RtlSecureZeroMemory(Entry, EntrySize);
                   PreviousEntry->NextEntryOffset += NextEntryOffset;
                   Entry = PreviousEntry;
@@ -279,28 +275,32 @@ NTSTATUS NTAPI NtQuerySystemInformation_hook(
       }
       return Status;
     }
-    case SystemModuleInformation:
-      if ( SystemInformationLength < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) )
-        return STATUS_INFO_LENGTH_MISMATCH;
-      return STATUS_ACCESS_DENIED;
+  }
+  if ( WLIsProtected() ) {
+    switch ( SystemInformationClass ) {
+      case SystemModuleInformation:
+        if ( SystemInformationLength < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) )
+          return STATUS_INFO_LENGTH_MISMATCH;
+        return STATUS_ACCESS_DENIED;
 
-    case SystemModuleInformationEx:
-      if ( SystemInformationLength < sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) )
-        return STATUS_INFO_LENGTH_MISMATCH;
-      return STATUS_ACCESS_DENIED;
+      case SystemModuleInformationEx:
+        if ( SystemInformationLength < sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) )
+          return STATUS_INFO_LENGTH_MISMATCH;
+        return STATUS_ACCESS_DENIED;
 
-    case SystemKernelDebuggerInformation:
-      if ( SystemInformationLength < sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION) )
-        return STATUS_INFO_LENGTH_MISMATCH;
-      ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerEnabled = FALSE;
-      ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerNotPresent = TRUE;
-      __try {
-        if ( ReturnLength )
-          *ReturnLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);;
-      } __except ( EXCEPTION_EXECUTE_HANDLER ) {
-        return GetExceptionCode();
-      }
-      return STATUS_SUCCESS;
+      case SystemKernelDebuggerInformation:
+        if ( SystemInformationLength < sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION) )
+          return STATUS_INFO_LENGTH_MISMATCH;
+        ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerEnabled = FALSE;
+        ((PSYSTEM_KERNEL_DEBUGGER_INFORMATION)SystemInformation)->KernelDebuggerNotPresent = TRUE;
+        __try {
+          if ( ReturnLength )
+            *ReturnLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);
+        } __except ( EXCEPTION_EXECUTE_HANDLER ) {
+          return GetExceptionCode();
+        }
+        return STATUS_SUCCESS;
+    }
   }
   return g_pfnNtQuerySystemInformation(
     SystemInformationClass,
@@ -392,18 +392,17 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
     || (SUCCEEDED_NTSTATUS(g_pfnNtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &ProcessInfo, sizeof(PROCESS_BASIC_INFORMATION), nullptr))
       && ProcessInfo.UniqueProcessId == NtCurrentTeb()->ClientId.UniqueProcess) ) {
 
-    const auto Entry = nt::rtl::pc_to_ldr_data_table_entry(StartRoutine);
+    const auto Entry = rtl::pc_to_ldr_data_table_entry(StartRoutine);
     if ( Entry && Entry->DllBase == NtCurrentPeb()->ImageBaseAddress ) {
-      const auto Sections = nt::rtl::image_sections(Entry->DllBase);
-      const auto Section = nt::rtl::find_image_section_by_name(Sections, ".winlice");
+      const auto Sections = rtl::image_sections(Entry->DllBase);
+      const auto Section = rtl::find_image_section_by_name(Sections, ".winlice");
       if ( Section != Sections.end() ) {
-        const auto Start = nt::rtl::image_rva_to_va<uchar>(Entry->DllBase, Section->VirtualAddress);
+        const auto Start = rtl::image_rva_to_va<uchar>(Entry->DllBase, Section->VirtualAddress);
         const auto End = Start + Section->Misc.VirtualSize;
         if ( StartRoutine >= Start && StartRoutine < End ) {
-          const auto BaseDllName = static_cast<nt::rtl::unicode_string_view *>(&Entry->BaseDllName);
           const auto text = std::format(L"[loader3] Refusing thread creation at entry {:.{}}+{:#x}.\n",
-            BaseDllName->data(),
-            BaseDllName->size(),
+            Entry->BaseDllName.Buffer,
+            Entry->BaseDllName.Length >> 1,
             (ULONG_PTR)StartRoutine - (ULONG_PTR)Entry->DllBase);
           OutputDebugStringW(text.c_str());
           return STATUS_INSUFFICIENT_RESOURCES;
@@ -428,9 +427,7 @@ NTSTATUS NTAPI NtCreateThreadEx_hook(
 
 static inline void hide_from_peb(HMODULE hLibModule)
 {
-  nt::rtl::loader_lock loaderLock{};
-  std::lock_guard<nt::rtl::loader_lock> guard{loaderLock};
-
+  const std::unique_lock<rtl::loader_lock> lock;
   const auto ldrData = NtCurrentPeb()->Ldr;
 
   for ( auto Next = ldrData->InLoadOrderModuleList.Flink; Next != &ldrData->InLoadOrderModuleList; Next = Next->Flink ) {
@@ -472,93 +469,118 @@ HWND WINAPI FindWindowA_hook(
     "RegmonClass",
     "18467-41"
   };
-  constexpr std::array WindowNames{
-    "File Monitor - Sysinternals: www.sysinternals.com",
-    "Process Monitor - Sysinternals: www.sysinternals.com",
-    "Registry Monitor - Sysinternals: www.sysinternals.com"
-  };
-  if ( (lpClassName && std::ranges::any_of(ClassNames, [lpClassName](LPCSTR String) { return lstrcmpiA(lpClassName, String) == 0; }))
-    || (lpWindowName && std::ranges::any_of(WindowNames, [lpWindowName](LPCSTR String) { return lstrcmpA(lpWindowName, String) == 0; })) ) {
+  if ( lpClassName && std::ranges::any_of(ClassNames, std::not_fn(std::bind_front(_stricmp, lpClassName))) )
     return nullptr;
+
+  if ( lpWindowName ) {
+    switch ( muu::fnv1a{}(lpWindowName).value() ) {
+      case "File Monitor - Sysinternals: www.sysinternals.com"_fnv1a:
+      case "Process Monitor - Sysinternals: www.sysinternals.com"_fnv1a:
+      case "Registry Monitor - Sysinternals: www.sysinternals.com"_fnv1a:
+        return nullptr;
+    }
   }
   return g_pfnFindWindowA(lpClassName, lpWindowName);
 }
 
-// Underlying API of IsUserAnAdmin, which is called by WL right after winmm.dll loads
-decltype(&SHTestTokenMembership) g_pfnSHTestTokenMembership;
-BOOL STDAPICALLTYPE SHTestTokenMembership_hook(_In_opt_ HANDLE hToken, ULONG ulRID)
+HRESULT Init()
 {
-  static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
-  static tls_recursion_guard lock;
-  std::unique_lock guard{lock, std::try_to_lock};
+  const auto resInfo = FindResourceW(nullptr, MAKEINTRESOURCEW(VS_VERSION_INFO), VS_FILE_INFO);
+  if ( !resInfo ) return S_OK;
 
-  if ( guard.owns_lock() ) {
-    wil::init_once_nothrow(InitOnce, [&]() {
-      if ( hToken != nullptr || ulRID != DOMAIN_ALIAS_RID_ADMINS )
-        return E_FAIL;
-      std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
-      path.remove_filename();
+  const auto count = SizeofResource(nullptr, resInfo);
+  if ( !count ) return S_OK;
 
-      const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR");
-      if ( str ) {
-        THROW_IF_WIN32_BOOL_FALSE(SetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR", nullptr));
-        std::filesystem::path tmp{wil::str_raw_ptr(str)};
-        if ( tmp.is_relative() )
-          path /= tmp;
-        else
-          path = std::move(tmp);
-      } else {
-        path /= L"plugins"s;
+  const auto ptr = LoadResource(nullptr, resInfo);
+  if ( !ptr ) return S_OK;
+
+  const std::span res{reinterpret_cast<PUCHAR>(ptr), count};
+  const std::vector<UCHAR> block{res.begin(), res.end()};
+  std::optional<std::wstring> ofilename;
+  LPVOID buffer;
+  UINT len;
+  if ( VerQueryValueW(block.data(), L"\\VarFileInfo\\Translation", &buffer, &len) ) {
+    for ( const auto &t : std::span{(PLANGANDCODEPAGE)buffer, len / sizeof(LANGANDCODEPAGE)} ) {
+      auto subBlock = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\OriginalFilename", t.wLanguage, t.wCodePage);
+      if ( VerQueryValueW(block.data(), subBlock.c_str(), &buffer, &len) ) {
+        ofilename.emplace(std::wstring_view{(LPWSTR)buffer, len - 1});
+        break;
       }
-
-      std::error_code ec;
-      for ( const auto &entry : std::filesystem::directory_iterator{path, ec} ) {
-        if ( !entry.is_regular_file() )
-          continue;
-
-        const auto ext = entry.path().extension();
-        if ( _wcsicmp(ext.c_str(), L".dll") != 0 )
-          continue;
-
-        wil::unique_hmodule hlib{LoadLibraryExW(entry.path().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
-        if ( hlib ) {
-          const auto plugin_info = reinterpret_cast<const plugin_info_t *>(GetProcAddress(hlib.get(), "GPluginInfo"));
-          if ( plugin_info && plugin_info->sdk_version == PLUGIN_SDK_VERSION )
-            GPlugins.emplace_back(std::move(hlib), plugin_info, entry.path());
-        }
-      }
-      GPlugins.sort([](const auto &lhs, const auto &rhs) {
-        return lhs.info->priority > rhs.info->priority;
-      });
-      std::erase_if(GPlugins, [](const auto &item) {
-        return item.info->init && !item.info->init(GClientVersion);
-      });
-      for ( const auto &item : GPlugins ) {
-        if ( item.info->hide_from_peb )
-          hide_from_peb(item.hmodule.get());
-
-        if ( item.info->erase_pe_header ) {
-          const auto nt_headers = nt::rtl::image_nt_headers(item.hmodule.get());
-          const nt::rtl::protect_memory protect{item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READWRITE};
-          SecureZeroMemory(item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders);
-        }
-        const auto text = std::format(L"[loader3] Loaded plugin: \"{}\" ({:#x})", item.path.c_str(), reinterpret_cast<uintptr_t>(item.hmodule.get()));
-        OutputDebugStringW(text.c_str());
-      }
-      return S_OK;
-    });
+    }
   }
-  return g_pfnSHTestTokenMembership(hToken, ulRID);
+
+  std::filesystem::path path{std::move(wil::GetModuleFileNameW<std::wstring>(nullptr))};
+  const auto filename = path.filename();
+  path.remove_filename();
+
+  const auto str = wil::TryGetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR");
+  if ( str ) {
+    THROW_IF_WIN32_BOOL_FALSE(SetEnvironmentVariableW(L"BNS_PROFILE_PLUGINS_DIR", nullptr));
+    std::filesystem::path tmp{wil::str_raw_ptr(str)};
+    if ( tmp.is_relative() )
+      path /= tmp;
+    else
+      path = std::move(tmp);
+  } else {
+    path /= L"plugins"s;
+  }
+
+  std::error_code ec;
+  for ( const auto &entry : std::filesystem::directory_iterator{path, ec} ) {
+    if ( !entry.is_regular_file() )
+      continue;
+
+    const auto ext = entry.path().extension();
+    if ( _wcsicmp(ext.c_str(), L".dll") != 0 )
+      continue;
+
+    wil::unique_hmodule hlib{LoadLibraryExW(entry.path().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH)};
+    if ( hlib ) {
+      const auto info = reinterpret_cast<const PluginInfo *>(GetProcAddress(hlib.get(), "GPluginInfo")); // allow both
+      if ( info && info->sdk_version >= 3 ) {
+        std::wstring targetApps{info->sdk_version >= Version{3, 1} ? info->target_apps : L"Client.exe"};
+        wchar_t *context;
+        auto token = wcstok_s(targetApps.data(), L";", &context);
+        while ( token ) {
+          if ( (ofilename && FastWildCompareW(ofilename->c_str(), token))
+            || FastWildCompareW(filename.c_str(), token) ) {
+            GPlugins.emplace_back(std::move(hlib), info, entry.path());
+            break;
+          }
+          token = wcstok_s(nullptr, L";", &context);
+        }
+      }
+    }
+  }
+  GPlugins.sort([](const auto &lhs, const auto &rhs) {
+    return lhs.info->priority > rhs.info->priority;
+  });
+  std::erase_if(GPlugins, [](const auto &item) {
+    return item.info->init && !item.info->init(GVersion);
+  });
+  for ( const auto &item : GPlugins ) {
+    if ( item.info->hide_from_peb )
+      hide_from_peb(item.hmodule.get());
+
+    if ( item.info->erase_pe_header ) {
+      const auto nt_headers = rtl::image_nt_headers(item.hmodule.get());
+      const nt::rtl::protect_memory protect{item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READWRITE};
+      SecureZeroMemory(item.hmodule.get(), nt_headers->OptionalHeader.SizeOfHeaders);
+    }
+    const auto text = std::format(L"[loader3] Loaded plugin: \"{}\" ({:#x})", item.path.c_str(), reinterpret_cast<uintptr_t>(item.hmodule.get()));
+    OutputDebugStringW(text.c_str());
+  }
+  return S_OK;
 }
 
 decltype(&GetSystemTimeAsFileTime) g_pfnGetSystemTimeAsFileTime;
 VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
 {
   static INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
-  static tls_recursion_guard lock;
-  std::unique_lock guard{lock, std::try_to_lock};
+  static thread_local_mutex mtx;
+  const std::unique_lock lock{mtx, std::try_to_lock};
 
-  if ( guard.owns_lock() ) {
+  if ( lock.owns_lock() ) {
     std::array<PVOID, 64> Buffer;
     const auto Count = RtlWalkFrameChain(Buffer.data(), SafeInt{Buffer.size()}, 0);
     const std::span<PVOID> Callers{Buffer.data(), Count};
@@ -572,9 +594,12 @@ VOID WINAPI GetSystemTimeAsFileTime_hook(LPFILETIME lpSystemTimeAsFileTime)
       });
       if ( it == Callers.end() || mbi.AllocationBase != NtCurrentPeb()->ImageBaseAddress )
         return E_FAIL;
+
+      RETURN_IF_FAILED(Init());
+
       for ( const auto &item : GPlugins ) {
         if ( item.info->oep_notify )
-          item.info->oep_notify(GClientVersion);
+          item.info->oep_notify(GVersion);
       }
       return S_OK;
     });
