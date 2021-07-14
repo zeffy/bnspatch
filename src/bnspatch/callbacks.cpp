@@ -16,7 +16,7 @@ void __cdecl oep_notify([[maybe_unused]] const Version client_version)
     const auto section = rtl::image_rva_to_va<UCHAR>(nullptr, section_header.VirtualAddress);
     const char name[] = ".?AVXmlReaderImpl@@";
     for ( auto ptr = section;
-      ptr + sizeof(TypeDescriptor) <= section + section_header.Misc.VirtualSize;
+      ptr + sizeof(TypeDescriptor) + sizeof(name) <= section + section_header.Misc.VirtualSize;
       ptr = (PUCHAR)(((ULONG_PTR)ptr + (alignof(TypeDescriptor) + 1)) & ~(alignof(TypeDescriptor) - 1)) ) {
       if ( !std::equal(std::begin(name), std::end(name), ptr + offsetof(TypeDescriptor, name)) )
         continue;
