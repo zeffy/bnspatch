@@ -499,6 +499,14 @@ HRESULT Init()
   std::optional<std::wstring> ofilename;
   LPVOID buffer;
   UINT len;
+  
+  if ( VerQueryValueW(block.data(), L"\\", &buffer, &len) && len == sizeof(VS_FIXEDFILEINFO) ) {
+    const auto vsf = static_cast<VS_FIXEDFILEINFO *>(buffer);
+    GVersion.major = HIWORD(vsf->dwProductVersionMS);
+    GVersion.minor = LOWORD(vsf->dwProductVersionMS);
+    GVersion.build = HIWORD(vsf->dwProductVersionLS);
+    GVersion.revision = LOWORD(vsf->dwProductVersionLS);
+  }
   if ( VerQueryValueW(block.data(), L"\\VarFileInfo\\Translation", &buffer, &len) ) {
     for ( const auto &t : std::span{(PLANGANDCODEPAGE)buffer, len / sizeof(LANGANDCODEPAGE)} ) {
       auto subBlock = std::format(L"\\StringFileInfo\\{:04x}{:04x}\\OriginalFilename", t.wLanguage, t.wCodePage);
